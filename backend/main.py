@@ -5,6 +5,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from database import init_database
 from routers.stocks import router as stocks_router
+from fastapi.middleware.cors import CORSMiddleware
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +27,15 @@ app = FastAPI(
     description="A FastAPI backend for financial dashboard with stock data",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Root and health endpoints only
