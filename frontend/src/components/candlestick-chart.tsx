@@ -627,6 +627,35 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   ${selectedOHLCV.close.toFixed(2)}
                 </span>
               </div>
+              {(() => {
+                // Calculate change and percentage change
+                const currentIndex = chartData.findIndex(item => item.time === selectedOHLCV.time);
+                const previousDay = currentIndex > 0 ? chartData[currentIndex - 1] : null;
+                
+                if (previousDay) {
+                  const change = selectedOHLCV.close - previousDay.close;
+                  const percentChange = (change / previousDay.close) * 100;
+                  const isPositive = change >= 0;
+                  
+                  return (
+                    <>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Change</span>
+                        <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                          {isPositive ? '+' : ''}${change.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">% Change</span>
+                        <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                          {isPositive ? '+' : ''}{percentChange.toFixed(2)}%
+                        </span>
+                      </div>
+                    </>
+                  );
+                }
+                return null;
+              })()}
               <div className="flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Vol</span>
                 <span className="font-medium text-zinc-900 dark:text-white">
