@@ -96,6 +96,7 @@ export default function Home() {
         return res.json();
       })
       .then(data => {
+        console.log('Watchlist data received:', data);
         setWatchlistData(Array.isArray(data) ? data : []);
       })
       .catch(e => {
@@ -147,7 +148,10 @@ export default function Home() {
                       ? 'bg-blue-500 text-white' 
                       : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700'
                   }`}
-                  onClick={() => setSelectedSymbol(symbol || null)}
+                  onClick={() => {
+                    console.log('Symbol clicked:', symbol);
+                    setSelectedSymbol(symbol || null);
+                  }}
                 >
                   {symbol || 'Unknown'}
                 </li>

@@ -100,15 +100,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
   useEffect(() => {
     if (!symbol || !candlestickSeriesRef.current || !volumeSeriesRef.current) {
+      console.log('Chart useEffect: Missing dependencies', { symbol, hasCandlestickSeries: !!candlestickSeriesRef.current, hasVolumeSeries: !!volumeSeriesRef.current });
       return;
     }
 
     const fetchData = async () => {
+      console.log(`Fetching price data for symbol: ${symbol}`);
       setLoading(true);
       setError(null);
 
       try {
-        const response = await fetch(`http://127.0.0.1:8080/price-data/${symbol}?days=90`);
+        const url = `http://127.0.0.1:8080/price-data/${symbol}?days=90`;
+        console.log(`Making API call to: ${url}`);
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
