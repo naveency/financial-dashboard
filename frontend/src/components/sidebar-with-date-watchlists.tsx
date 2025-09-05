@@ -18,11 +18,18 @@ export interface Watchlist {
 }
 
 export const mockWatchlists: Watchlist[] = [
-  { id: '1', name: 'Tech Stocks' },
-  { id: '2', name: 'Crypto' },
-  { id: '3', name: 'ETFs' },
-  { id: '4', name: 'Favorites' },
-  { id: '5', name: 'swing cross up' },
+  { id: 'new-highs-63', name: 'New Highs (63D)' },
+  { id: 'new-highs-252', name: 'New Highs (252D)' },
+  { id: 'new-lows-63', name: 'New Lows (63D)' },
+  { id: 'new-lows-252', name: 'New Lows (252D)' },
+  { id: 'gapup', name: 'Gap Up' },
+  { id: 'gapdown', name: 'Gap Down' },
+  { id: 'swing-high-cross-up', name: 'Swing High Cross Up' },
+  { id: 'swing-high-cross-down', name: 'Swing High Cross Down' },
+  { id: 'swing-low-cross-up', name: 'Swing Low Cross Up' },
+  { id: 'swing-low-cross-down', name: 'Swing Low Cross Down' },
+  { id: 'new-signals', name: 'New Signals' },
+  { id: '52-week-rs', name: '52 Week Relative Strength' },
 ];
 
 interface SidebarWithDateAndWatchlistsProps {

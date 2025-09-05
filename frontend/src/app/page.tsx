@@ -6,61 +6,102 @@ import { SidebarWithDateAndWatchlists, mockWatchlists } from "../components/side
 export default function Home() {
   const [selectedWatchlistId, setSelectedWatchlistId] = useState(mockWatchlists[0].id);
   const selectedWatchlist = mockWatchlists.find(w => w.id === selectedWatchlistId);
-  const [swingCrossData, setSwingCrossData] = useState<string[] | null>(null);
+  const [watchlistData, setWatchlistData] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState<string>("");
 
-  // Placeholder data for watchlist components
-  const watchlistComponents = selectedWatchlistId === '1'
-    ? ['AAPL', 'GOOGL', 'MSFT']
-    : selectedWatchlistId === '2'
-    ? ['BTC', 'ETH', 'SOL']
-    : selectedWatchlistId === '3'
-    ? ['VOO', 'VTI', 'ARKK']
-    : selectedWatchlistId === '5' && swingCrossData
-    ? swingCrossData
-    : ['Custom 1', 'Custom 2'];
+  // Get watchlist components from API data
+  const watchlistComponents = watchlistData || [];
 
   useEffect(() => {
     // On mount, fetch the max date from the API and set it as the date
-    fetch('http://127.0.0.1:8080/swing-high-cross')
+    fetch('http://127.0.0.1:8080/maxdate')
       .then(res => res.json())
       .then(data => {
-        // Assume the API returns an array of objects with a date property, or an array of dates
-        let maxDate = "";
-        if (Array.isArray(data) && data.length > 0) {
-          // Try to find the max date from the data
-          // If data is array of objects with date property
-          if (typeof data[0] === 'object' && data[0] !== null && 'date' in data[0]) {
-            maxDate = data.map((d: { date: string }) => d.date).sort().reverse()[0];
-          } else if (typeof data[0] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data[0])) {
-            // If data is array of date strings
-            maxDate = data.sort().reverse()[0];
-          }
+        if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) {
+          setDate(data);
+        } else if (data && typeof data === 'object' && 'date' in data) {
+          setDate(data.date);
         }
-        if (maxDate) setDate(maxDate);
-      });
+      })
+      .catch(e => console.error('Failed to fetch max date:', e));
   }, []);
 
   useEffect(() => {
-    if (selectedWatchlist?.name === 'swing cross up' && date) {
-      setLoading(true);
-      setError(null);
-      fetch(`http://127.0.0.1:8080/swing-high-cross?date=${date}&direction=up`)
-        .then(res => {
-          if (!res.ok) throw new Error('Failed to fetch');
-          return res.json();
-        })
-        .then(data => {
-          setSwingCrossData(Array.isArray(data) ? data : []);
-        })
-        .catch(e => setError(e.message))
-        .finally(() => setLoading(false));
-    } else {
-      setSwingCrossData(null);
+    if (!date || !selectedWatchlistId) return;
+
+    setLoading(true);
+    setError(null);
+    
+    let url = '';
+    let params = new URLSearchParams({ date });
+    
+    switch (selectedWatchlistId) {
+      case 'new-highs-63':
+        url = 'http://127.0.0.1:8080/new-highs';
+        params.append('period', '63');
+        break;
+      case 'new-highs-252':
+        url = 'http://127.0.0.1:8080/new-highs';
+        params.append('period', '252');
+        break;
+      case 'new-lows-63':
+        url = 'http://127.0.0.1:8080/new-lows';
+        params.append('period', '63');
+        break;
+      case 'new-lows-252':
+        url = 'http://127.0.0.1:8080/new-lows';
+        params.append('period', '252');
+        break;
+      case 'gapup':
+        url = 'http://127.0.0.1:8080/gapup';
+        break;
+      case 'gapdown':
+        url = 'http://127.0.0.1:8080/gapdown';
+        break;
+      case 'swing-high-cross-up':
+        url = 'http://127.0.0.1:8080/swing-high-cross';
+        params.append('direction', 'up');
+        break;
+      case 'swing-high-cross-down':
+        url = 'http://127.0.0.1:8080/swing-high-cross';
+        params.append('direction', 'down');
+        break;
+      case 'swing-low-cross-up':
+        url = 'http://127.0.0.1:8080/swing-low-cross';
+        params.append('direction', 'up');
+        break;
+      case 'swing-low-cross-down':
+        url = 'http://127.0.0.1:8080/swing-low-cross';
+        params.append('direction', 'down');
+        break;
+      case 'new-signals':
+        url = 'http://127.0.0.1:8080/new-signals';
+        break;
+      case '52-week-rs':
+        url = 'http://127.0.0.1:8080/52-week-relative-strength';
+        break;
+      default:
+        setWatchlistData([]);
+        setLoading(false);
+        return;
     }
-  }, [selectedWatchlistId, selectedWatchlist, date]);
+
+    fetch(`${url}?${params.toString()}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        return res.json();
+      })
+      .then(data => {
+        setWatchlistData(Array.isArray(data) ? data : []);
+      })
+      .catch(e => {
+        setError(e.message);
+        setWatchlistData([]);
+      })
+      .finally(() => setLoading(false));
+  }, [selectedWatchlistId, date]);
 
   return (
     <div className="flex min-h-screen">
