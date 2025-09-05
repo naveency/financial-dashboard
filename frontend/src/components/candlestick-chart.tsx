@@ -29,8 +29,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current) {
+      console.log('Chart container not ready yet');
+      return;
+    }
 
+    console.log('Initializing chart...', { containerWidth: chartContainerRef.current.clientWidth });
+    
     // Create chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -78,6 +83,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     chartRef.current = chart;
     candlestickSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = volumeSeries;
+    
+    console.log('Chart initialized successfully', {
+      hasChart: !!chart,
+      hasCandlestickSeries: !!candlestickSeries,
+      hasVolumeSeries: !!volumeSeries
+    });
 
     // Handle resize
     const handleResize = () => {
