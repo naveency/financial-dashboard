@@ -3,6 +3,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 
+// EMA calculation function
+const calculateEMA = (data: number[], period: number): number[] => {
+  const ema: number[] = [];
+  const multiplier = 2 / (period + 1);
+  
+  // First value is simple moving average
+  let sum = 0;
+  for (let i = 0; i < period && i < data.length; i++) {
+    sum += data[i];
+  }
+  ema[period - 1] = sum / period;
+  
+  // Calculate EMA for rest of the values
+  for (let i = period; i < data.length; i++) {
+    ema[i] = (data[i] * multiplier) + (ema[i - 1] * (1 - multiplier));
+  }
+  
+  return ema;
+};
+
 interface CandlestickData {
   time: string;
   open: number;
@@ -23,6 +43,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const ema21SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const ema200SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,6 +57,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         chartRef.current = null;
         candlestickSeriesRef.current = null;
         volumeSeriesRef.current = null;
+        ema21SeriesRef.current = null;
+        ema200SeriesRef.current = null;
       }
       return;
     }
@@ -99,6 +123,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         priceScaleId: 'volume',
       });
 
+      // Create EMA line series
+      const ema21Series = chart.addLineSeries({
+        color: '#ff6b35', // Orange color for 21 EMA
+        lineWidth: 2,
+        title: 'EMA 21',
+      });
+
+      const ema200Series = chart.addLineSeries({
+        color: '#1e40af', // Blue color for 200 EMA
+        lineWidth: 2,
+        title: 'EMA 200',
+      });
+
       // Set volume series to bottom pane
       chart.priceScale('volume').applyOptions({
         scaleMargins: {
@@ -110,6 +147,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       chartRef.current = chart;
       candlestickSeriesRef.current = candlestickSeries;
       volumeSeriesRef.current = volumeSeries;
+      ema21SeriesRef.current = ema21Series;
+      ema200SeriesRef.current = ema200Series;
       
       console.log('Chart initialized successfully', {
         hasChart: !!chart,
@@ -135,7 +174,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         setError(null);
 
         try {
-          const url = `http://127.0.0.1:8080/price-data/${symbol}?days=90`;
+          const url = `http://127.0.0.1:8080/price-data/${symbol}?days=365`;
           console.log(`Making API call to: ${url}`);
           const response = await fetch(url);
           if (!response.ok) {
@@ -163,14 +202,32 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             color: item.close > item.open ? '#22c55e40' : '#ef444440',
           }));
 
+          // Calculate EMAs using close prices
+          const closePrices = data.map(item => item.close);
+          const ema21Values = calculateEMA(closePrices, 21);
+          const ema200Values = calculateEMA(closePrices, 200);
+
+          // Create EMA data for chart (only include values where EMA exists)
+          const ema21Data = data.map((item, index) => ({
+            time: item.time,
+            value: ema21Values[index] || null,
+          })).filter(item => item.value !== null) as { time: string; value: number }[];
+
+          const ema200Data = data.map((item, index) => ({
+            time: item.time,
+            value: ema200Values[index] || null,
+          })).filter(item => item.value !== null) as { time: string; value: number }[];
+
           // Set data to series
           candlestickSeries.setData(candlestickData);
           volumeSeries.setData(volumeData);
+          ema21Series.setData(ema21Data);
+          ema200Series.setData(ema200Data);
 
           // Fit content
           chart.timeScale().fitContent();
 
-          console.log(`Successfully loaded ${data.length} data points for ${symbol}`);
+          console.log(`Successfully loaded ${data.length} data points, ${ema21Data.length} EMA21 points, ${ema200Data.length} EMA200 points for ${symbol}`);
 
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -199,6 +256,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         chartRef.current = null;
         candlestickSeriesRef.current = null;
         volumeSeriesRef.current = null;
+        ema21SeriesRef.current = null;
+        ema200SeriesRef.current = null;
       }
     };
   }, [symbol]);
