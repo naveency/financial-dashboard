@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { SidebarWithDateAndWatchlists, mockWatchlists } from "../components/sidebar-with-date-watchlists";
+import { CandlestickChart } from "../components/candlestick-chart";
 
 export default function Home() {
   const [selectedWatchlistId, setSelectedWatchlistId] = useState(mockWatchlists[0].id);
   const selectedWatchlist = mockWatchlists.find(w => w.id === selectedWatchlistId);
-  const [watchlistData, setWatchlistData] = useState<any[] | null>(null);
+  const [watchlistData, setWatchlistData] = useState<Array<{symbol?: string; ticker?: string; name?: string}> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState<string>("");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
 
   // Get watchlist components from API data
   const watchlistComponents = watchlistData || [];
@@ -35,7 +37,7 @@ export default function Home() {
     setError(null);
     
     let url = '';
-    let params = new URLSearchParams({ date });
+    const params = new URLSearchParams({ date });
     
     switch (selectedWatchlistId) {
       case 'new-highs-63':
@@ -115,9 +117,12 @@ export default function Home() {
       </aside>
       <main className="flex-1 flex">
         <div className="flex-1 flex">
-          {/* Candlestick chart placeholder */}
-          <div className="flex-1 h-[400px] bg-zinc-100 dark:bg-zinc-800 rounded-lg m-8 flex items-center justify-center text-zinc-400">
-            Candlestick Chart
+          {/* Candlestick chart */}
+          <div className="flex-1 p-8">
+            <CandlestickChart 
+              symbol={selectedSymbol}
+              height={500}
+            />
           </div>
         </div>
         <div className="w-72 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-4 h-screen overflow-y-auto">
@@ -133,8 +138,17 @@ export default function Home() {
                     (item as { symbol?: string; ticker?: string; name?: string }).ticker || 
                     (item as { symbol?: string; ticker?: string; name?: string }).name
                   : JSON.stringify(item);
+              const isSelected = selectedSymbol === symbol;
               return (
-                <li key={(symbol || 'unknown') + idx} className="rounded px-3 py-2 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white">
+                <li 
+                  key={(symbol || 'unknown') + idx} 
+                  className={`rounded px-3 py-2 cursor-pointer transition-colors ${
+                    isSelected 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                  onClick={() => setSelectedSymbol(symbol || null)}
+                >
                   {symbol || 'Unknown'}
                 </li>
               );

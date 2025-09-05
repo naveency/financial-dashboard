@@ -8,6 +8,7 @@ from .get_new_lows import router as get_new_lows_router
 from .get_new_signals import router as get_new_signals_router
 from .get_swing_high_cross import router as get_swing_high_cross_router
 from .get_swing_low_cross import router as get_swing_low_cross_router
+from .get_price_data import router as get_price_data_router
 
 router = APIRouter()
 
@@ -20,3 +21,4 @@ router.include_router(get_new_lows_router)
 router.include_router(get_new_signals_router)
 router.include_router(get_swing_high_cross_router)
 router.include_router(get_swing_low_cross_router)
+router.include_router(get_price_data_router)
