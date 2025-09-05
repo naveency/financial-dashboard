@@ -29,66 +29,96 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!chartContainerRef.current) {
-      console.log('Chart container not ready yet');
-      return;
+    const initChart = () => {
+      if (!chartContainerRef.current) {
+        console.log('Chart container not ready yet');
+        return null;
+      }
+
+      console.log('Initializing chart...', { 
+        containerWidth: chartContainerRef.current.clientWidth,
+        containerHeight: chartContainerRef.current.clientHeight 
+      });
+      
+      // Ensure container has dimensions
+      if (chartContainerRef.current.clientWidth === 0) {
+        console.log('Container width is 0, cannot initialize chart');
+        return null;
+      }
+
+      console.log('Creating chart with dimensions:', {
+        width: chartContainerRef.current.clientWidth,
+        height
+      });
+    
+      // Create chart
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: '#d1d5db',
+        },
+        grid: {
+          vertLines: { color: '#374151' },
+          horzLines: { color: '#374151' },
+        },
+        width: chartContainerRef.current.clientWidth,
+        height,
+        timeScale: {
+          timeVisible: true,
+          secondsVisible: false,
+        },
+      });
+
+      // Create candlestick series
+      const candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#22c55e',
+        downColor: '#ef4444',
+        borderVisible: false,
+        wickUpColor: '#22c55e',
+        wickDownColor: '#ef4444',
+      });
+
+      // Create volume series
+      const volumeSeries = chart.addHistogramSeries({
+        color: '#6b7280',
+        priceFormat: {
+          type: 'volume',
+        },
+        priceScaleId: 'volume',
+      });
+
+      // Set volume series to bottom pane
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      });
+
+      chartRef.current = chart;
+      candlestickSeriesRef.current = candlestickSeries;
+      volumeSeriesRef.current = volumeSeries;
+      
+      console.log('Chart initialized successfully', {
+        hasChart: !!chart,
+        hasCandlestickSeries: !!candlestickSeries,
+        hasVolumeSeries: !!volumeSeries
+      });
+
+      return chart;
+    };
+
+    // Try to initialize immediately
+    const chart = initChart();
+    
+    // If initialization failed, try again after a short delay
+    if (!chart) {
+      console.log('Initial chart initialization failed, retrying...');
+      const timer = setTimeout(() => {
+        initChart();
+      }, 100);
+      return () => clearTimeout(timer);
     }
-
-    console.log('Initializing chart...', { containerWidth: chartContainerRef.current.clientWidth });
-    
-    // Create chart
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#d1d5db',
-      },
-      grid: {
-        vertLines: { color: '#374151' },
-        horzLines: { color: '#374151' },
-      },
-      width: chartContainerRef.current.clientWidth,
-      height,
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    // Create candlestick series
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-    });
-
-    // Create volume series
-    const volumeSeries = chart.addHistogramSeries({
-      color: '#6b7280',
-      priceFormat: {
-        type: 'volume',
-      },
-      priceScaleId: 'volume',
-    });
-
-    // Set volume series to bottom pane
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: {
-        top: 0.8,
-        bottom: 0,
-      },
-    });
-
-    chartRef.current = chart;
-    candlestickSeriesRef.current = candlestickSeries;
-    volumeSeriesRef.current = volumeSeries;
-    
-    console.log('Chart initialized successfully', {
-      hasChart: !!chart,
-      hasCandlestickSeries: !!candlestickSeries,
-      hasVolumeSeries: !!volumeSeries
-    });
 
     // Handle resize
     const handleResize = () => {
@@ -105,6 +135,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       window.removeEventListener('resize', handleResize);
       if (chartRef.current) {
         chartRef.current.remove();
+        chartRef.current = null;
+        candlestickSeriesRef.current = null;
+        volumeSeriesRef.current = null;
       }
     };
   }, [height]);
