@@ -3,26 +3,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 
-// EMA calculation function
-const calculateEMA = (data: number[], period: number): number[] => {
-  const ema: number[] = [];
-  const multiplier = 2 / (period + 1);
-  
-  // First value is simple moving average
-  let sum = 0;
-  for (let i = 0; i < period && i < data.length; i++) {
-    sum += data[i];
-  }
-  ema[period - 1] = sum / period;
-  
-  // Calculate EMA for rest of the values
-  for (let i = period; i < data.length; i++) {
-    ema[i] = (data[i] * multiplier) + (ema[i - 1] * (1 - multiplier));
-  }
-  
-  return ema;
-};
-
 interface CandlestickData {
   time: string;
   open: number;
@@ -30,6 +10,8 @@ interface CandlestickData {
   low: number;
   close: number;
   volume: number;
+  ema_21?: number | null;
+  ema_200?: number | null;
 }
 
 interface CandlestickChartProps {
@@ -202,21 +184,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             color: item.close > item.open ? '#22c55e40' : '#ef444440',
           }));
 
-          // Calculate EMAs using close prices
-          const closePrices = data.map(item => item.close);
-          const ema21Values = calculateEMA(closePrices, 21);
-          const ema200Values = calculateEMA(closePrices, 200);
+          // Extract EMA data from API response (only include values where EMA exists)
+          const ema21Data = data
+            .filter(item => item.ema_21 !== null && item.ema_21 !== undefined)
+            .map(item => ({
+              time: item.time,
+              value: item.ema_21!,
+            }));
 
-          // Create EMA data for chart (only include values where EMA exists)
-          const ema21Data = data.map((item, index) => ({
-            time: item.time,
-            value: ema21Values[index] || null,
-          })).filter(item => item.value !== null) as { time: string; value: number }[];
-
-          const ema200Data = data.map((item, index) => ({
-            time: item.time,
-            value: ema200Values[index] || null,
-          })).filter(item => item.value !== null) as { time: string; value: number }[];
+          const ema200Data = data
+            .filter(item => item.ema_200 !== null && item.ema_200 !== undefined)
+            .map(item => ({
+              time: item.time,
+              value: item.ema_200!,
+            }));
 
           // Set data to series
           candlestickSeries.setData(candlestickData);

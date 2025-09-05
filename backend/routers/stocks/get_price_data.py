@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 import logging
 from database import execute_query
 from pydantic import BaseModel
@@ -14,6 +14,8 @@ class CandlestickData(BaseModel):
     low: float
     close: float
     volume: int
+    ema_21: Optional[float] = None
+    ema_200: Optional[float] = None
 
 @router.get("/price-data/{symbol}", response_model=List[CandlestickData])
 async def get_price_data(
@@ -30,7 +32,7 @@ async def get_price_data(
         start_date = end_date - timedelta(days=days)
         
         query = """
-        SELECT date, open, high, low, close, volume
+        SELECT date, open, high, low, close, volume, ema_21, ema_200
         FROM stock_data_daily
         WHERE symbol = ? AND date >= ? AND date <= ?
         ORDER BY date ASC
@@ -54,7 +56,9 @@ async def get_price_data(
                 high=float(row['high']),
                 low=float(row['low']),
                 close=float(row['close']),
-                volume=int(row['volume'])
+                volume=int(row['volume']),
+                ema_21=float(row['ema_21']) if row['ema_21'] is not None else None,
+                ema_200=float(row['ema_200']) if row['ema_200'] is not None else None
             ))
         
         return candlestick_data
