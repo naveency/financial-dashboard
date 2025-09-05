@@ -33,7 +33,7 @@ export default function Home() {
           // Try to find the max date from the data
           // If data is array of objects with date property
           if (typeof data[0] === 'object' && data[0] !== null && 'date' in data[0]) {
-            maxDate = data.map((d: any) => d.date).sort().reverse()[0];
+            maxDate = data.map((d: { date: string }) => d.date).sort().reverse()[0];
           } else if (typeof data[0] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data[0])) {
             // If data is array of date strings
             maxDate = data.sort().reverse()[0];
@@ -85,14 +85,16 @@ export default function Home() {
           {error && <div className="text-red-500">{error}</div>}
           <ul className="flex flex-col gap-2">
             {watchlistComponents.map((item, idx) => {
-              let symbol = typeof item === 'string'
+              const symbol = typeof item === 'string'
                 ? item
-                : (item && typeof item === 'object' && (item.symbol || item.ticker || item.name))
-                  ? item.symbol || item.ticker || item.name
+                : (item && typeof item === 'object' && ('symbol' in item || 'ticker' in item || 'name' in item))
+                  ? (item as { symbol?: string; ticker?: string; name?: string }).symbol || 
+                    (item as { symbol?: string; ticker?: string; name?: string }).ticker || 
+                    (item as { symbol?: string; ticker?: string; name?: string }).name
                   : JSON.stringify(item);
               return (
-                <li key={symbol + idx} className="rounded px-3 py-2 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white">
-                  {symbol}
+                <li key={(symbol || 'unknown') + idx} className="rounded px-3 py-2 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white">
+                  {symbol || 'Unknown'}
                 </li>
               );
             })}
