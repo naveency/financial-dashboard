@@ -36,6 +36,7 @@ class EODHDMarketHoursService {
   private cachedExchangeDetails: EODHDExchangeDetails | null = null;
   private cacheExpiry: number = 0;
   private readonly cacheDuration = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  private hasLoggedNoSessionsWarning = false; // Track if we've already logged the warning
 
   constructor() {
     this.apiToken = process.env.NEXT_PUBLIC_EODHD_API_TOKEN || '';
@@ -74,6 +75,7 @@ class EODHDMarketHoursService {
       // Cache the results
       this.cachedExchangeDetails = data;
       this.cacheExpiry = Date.now() + this.cacheDuration;
+      
 
       return data;
     } catch (error) {
@@ -110,7 +112,11 @@ class EODHDMarketHoursService {
     const exchangeDetails = await this.fetchExchangeDetails();
     
     if (!exchangeDetails?.TradingHours?.sessions || exchangeDetails.TradingHours.sessions.length === 0) {
-      console.warn('EODHD API returned no trading sessions. Using conservative fallback (regular hours only).');
+      // Only log the warning once per session
+      if (!this.hasLoggedNoSessionsWarning) {
+        console.warn('EODHD API returned no trading sessions. Using conservative fallback (regular hours only).');
+        this.hasLoggedNoSessionsWarning = true;
+      }
       // Return conservative fallback - only regular hours to avoid false positives
       return [
         { type: 'regular', start: '09:30', end: '16:00' }
@@ -209,6 +215,7 @@ class EODHDMarketHoursService {
   clearCache(): void {
     this.cachedExchangeDetails = null;
     this.cacheExpiry = 0;
+    this.hasLoggedNoSessionsWarning = false; // Reset warning flag when clearing cache
   }
 }
 

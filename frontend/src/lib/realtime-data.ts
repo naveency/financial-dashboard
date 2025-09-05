@@ -43,16 +43,6 @@ export class EODHDRealtimeService {
     this.apiToken = process.env.NEXT_PUBLIC_EODHD_API_TOKEN || '';
     this.wsUrl = process.env.NEXT_PUBLIC_EODHD_WS_US_TRADE || '';
     
-    // Debug logging and validation
-    if (process.env.NODE_ENV === 'development') {
-      console.log('EODHD Service Debug:', {
-        hasApiToken: !!this.apiToken,
-        apiTokenLength: this.apiToken.length,
-        wsUrl: this.wsUrl,
-        tokenPreview: this.apiToken ? this.apiToken.substring(0, 8) + '...' : 'none',
-        tokenFormat: this.validateTokenFormat(this.apiToken)
-      });
-    }
     
     if (!this.apiToken || !this.wsUrl) {
       throw new Error('EODHD API token and WebSocket URL are required');
@@ -60,7 +50,7 @@ export class EODHDRealtimeService {
     
     // Validate token format
     if (!this.validateTokenFormat(this.apiToken)) {
-      console.warn('EODHD API token may have invalid format. Expected format: xxxxxxxx.xxxxxxxx');
+      console.warn('EODHD API token may have invalid format. Please check your token configuration.');
     }
   }
 
@@ -73,11 +63,9 @@ export class EODHDRealtimeService {
         this.statusCallback?.('connecting');
         
         const wsUrlWithAuth = `${this.wsUrl}?api_token=${this.apiToken}`;
-        console.log('Connecting to EODHD WebSocket:', wsUrlWithAuth.replace(this.apiToken, 'TOKEN_HIDDEN'));
         this.ws = new WebSocket(wsUrlWithAuth);
 
         this.ws.onopen = () => {
-          console.log('EODHD WebSocket connected');
           this.reconnectAttempts = 0;
           this.statusCallback?.('connected');
           
@@ -92,7 +80,6 @@ export class EODHDRealtimeService {
         this.ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('EODHD WebSocket message received:', data);
             this.handleMessage(data);
           } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -101,25 +88,7 @@ export class EODHDRealtimeService {
         };
 
         this.ws.onclose = (event) => {
-          console.log('EODHD WebSocket disconnected:', {
-            code: event.code,
-            reason: event.reason,
-            wasClean: event.wasClean
-          });
           this.statusCallback?.('disconnected');
-          
-          // Common WebSocket close codes
-          const closeReasons = {
-            1000: 'Normal closure',
-            1001: 'Going away',
-            1002: 'Protocol error',
-            1003: 'Unsupported data',
-            1006: 'Abnormal closure',
-            1011: 'Server error',
-            1015: 'TLS handshake failure'
-          };
-          
-          console.log('Close reason:', closeReasons[event.code as keyof typeof closeReasons] || 'Unknown');
           
           // Attempt to reconnect if not manually closed
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -140,7 +109,7 @@ export class EODHDRealtimeService {
           // Check if it's an authentication error
           if (this.ws?.readyState === WebSocket.CONNECTING) {
             if (!this.validateTokenFormat(this.apiToken)) {
-              console.error('Connection failed - invalid API token format. Expected: xxxxxxxx.xxxxxxxx');
+              console.error('Connection failed - API token may be invalid or malformed');
             } else {
               console.error('Connection failed - possible authentication or network issue');
             }
@@ -186,7 +155,6 @@ export class EODHDRealtimeService {
 
     this.ws.send(JSON.stringify(subscribeMessage));
     this.subscribedSymbols.add(symbol);
-    console.log(`Subscribed to realtime data for ${symbol}`);
   }
 
   /**
@@ -205,7 +173,6 @@ export class EODHDRealtimeService {
 
     this.ws.send(JSON.stringify(unsubscribeMessage));
     this.subscribedSymbols.delete(symbol);
-    console.log(`Unsubscribed from realtime data for ${symbol}`);
   }
 
   /**
@@ -244,10 +211,7 @@ export class EODHDRealtimeService {
         condition: data.c
       };
 
-      console.log('Processing realtime price update:', realtimePrice);
       this.dataCallback?.(realtimePrice);
-    } else {
-      console.log('Received non-price message:', data);
     }
   }
 
@@ -257,8 +221,6 @@ export class EODHDRealtimeService {
   private attemptReconnect(): void {
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
     setTimeout(() => {
       this.connect().catch(error => {
@@ -299,16 +261,20 @@ export class EODHDRealtimeService {
 
   /**
    * Validate EODHD API token format
-   * Expected format: xxxxxxxx.xxxxxxxx (8 chars, dot, 8 chars)
+   * EODHD tokens can have various formats, be more flexible
    */
   private validateTokenFormat(token: string): boolean {
     if (!token || typeof token !== 'string') {
       return false;
     }
 
-    // EODHD tokens typically follow the pattern: 8chars.8chars
-    const tokenPattern = /^[a-zA-Z0-9]{8}\.[a-zA-Z0-9]{8}$/;
-    return tokenPattern.test(token);
+    // More flexible validation for EODHD tokens
+    // Allow various formats: 8.8, longer strings with dots, or alphanumeric strings
+    const isValidLength = token.length >= 10; // Minimum reasonable length
+    const hasValidChars = /^[a-zA-Z0-9._-]+$/.test(token); // Allow alphanumeric, dots, hyphens, underscores
+    const notObviousPlaceholder = !token.toLowerCase().includes('your_') && !token.toLowerCase().includes('token_here');
+    
+    return isValidLength && hasValidChars && notObviousPlaceholder;
   }
 }
 
