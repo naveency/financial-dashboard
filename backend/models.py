@@ -77,3 +77,12 @@ class SymbolTypeResponse(BaseModel):
     """Model for endpoints returning only symbol and type"""
     symbol: str
     type: str
+
+class SymbolWithPriceResponse(BaseModel):
+    """Model for endpoints returning symbol, type, and price data"""
+    symbol: str
+    type: str
+    last_price: Optional[float] = None
+    prev_close: Optional[float] = None
+    price_change: Optional[float] = None
+    percent_change: Optional[float] = None
