@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { SidebarWithDateAndWatchlists, mockWatchlists } from "../components/sidebar-with-date-watchlists";
 import { CandlestickChart } from "../components/candlestick-chart";
+import { API_ENDPOINTS } from "../lib/api-config";
 
 export default function Home() {
   const [selectedWatchlistId, setSelectedWatchlistId] = useState(mockWatchlists[0].id);
@@ -19,13 +20,15 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState<string>("");
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [rightPanelWidth, setRightPanelWidth] = useState(384); // 24rem = 384px
+  const [isResizing, setIsResizing] = useState(false);
 
   // Get watchlist components from API data
   const watchlistComponents = watchlistData || [];
 
   useEffect(() => {
     // On mount, fetch the max date from the API and set it as the date
-    fetch('http://127.0.0.1:8080/maxdate')
+    fetch(API_ENDPOINTS.maxdate)
       .then(res => res.json())
       .then(data => {
         if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) {
@@ -42,54 +45,60 @@ export default function Home() {
 
     setLoading(true);
     setError(null);
+    setSelectedSymbol(null); // Clear selected symbol when watchlist changes
     
     let url = '';
     const params = new URLSearchParams({ date });
     
     switch (selectedWatchlistId) {
       case 'new-highs-63':
-        url = 'http://127.0.0.1:8080/new-highs';
+        url = API_ENDPOINTS.newHighs;
         params.append('period', '63');
         break;
       case 'new-highs-252':
-        url = 'http://127.0.0.1:8080/new-highs';
+        url = API_ENDPOINTS.newHighs;
         params.append('period', '252');
         break;
       case 'new-lows-63':
-        url = 'http://127.0.0.1:8080/new-lows';
+        url = API_ENDPOINTS.newLows;
         params.append('period', '63');
         break;
       case 'new-lows-252':
-        url = 'http://127.0.0.1:8080/new-lows';
+        url = API_ENDPOINTS.newLows;
         params.append('period', '252');
         break;
       case 'gapup':
-        url = 'http://127.0.0.1:8080/gapup';
+        url = API_ENDPOINTS.gapup;
         break;
       case 'gapdown':
-        url = 'http://127.0.0.1:8080/gapdown';
+        url = API_ENDPOINTS.gapdown;
         break;
       case 'swing-high-cross-up':
-        url = 'http://127.0.0.1:8080/swing-high-cross';
+        url = API_ENDPOINTS.swingHighCross;
         params.append('direction', 'up');
         break;
       case 'swing-high-cross-down':
-        url = 'http://127.0.0.1:8080/swing-high-cross';
+        url = API_ENDPOINTS.swingHighCross;
         params.append('direction', 'down');
         break;
       case 'swing-low-cross-up':
-        url = 'http://127.0.0.1:8080/swing-low-cross';
+        url = API_ENDPOINTS.swingLowCross;
         params.append('direction', 'up');
         break;
       case 'swing-low-cross-down':
-        url = 'http://127.0.0.1:8080/swing-low-cross';
+        url = API_ENDPOINTS.swingLowCross;
         params.append('direction', 'down');
         break;
-      case 'new-signals':
-        url = 'http://127.0.0.1:8080/new-signals';
+      case 'new-buys':
+        url = API_ENDPOINTS.newSignals;
+        params.append('signal', 'buy');
+        break;
+      case 'new-sells':
+        url = API_ENDPOINTS.newSignals;
+        params.append('signal', 'sell');
         break;
       case '52-week-rs':
-        url = 'http://127.0.0.1:8080/52-week-relative-strength';
+        url = API_ENDPOINTS.weekRelativeStrength;
         break;
       default:
         setWatchlistData([]);
@@ -104,11 +113,28 @@ export default function Home() {
       })
       .then(data => {
         console.log('Watchlist data received:', data);
-        setWatchlistData(Array.isArray(data) ? data : []);
+        const dataArray = Array.isArray(data) ? data : [];
+        setWatchlistData(dataArray);
+        
+        // Auto-select first symbol when watchlist data is loaded
+        if (dataArray.length > 0) {
+          const firstItem = dataArray[0];
+          const firstSymbol = typeof firstItem === 'string'
+            ? firstItem
+            : (firstItem && typeof firstItem === 'object' && ('symbol' in firstItem || 'ticker' in firstItem || 'name' in firstItem))
+              ? (firstItem as { symbol?: string; ticker?: string; name?: string }).symbol || 
+                (firstItem as { symbol?: string; ticker?: string; name?: string }).ticker || 
+                (firstItem as { symbol?: string; ticker?: string; name?: string }).name
+              : null;
+          setSelectedSymbol(firstSymbol || null);
+        } else {
+          setSelectedSymbol(null);
+        }
       })
       .catch(e => {
         setError(e.message);
         setWatchlistData([]);
+        setSelectedSymbol(null);
       })
       .finally(() => setLoading(false));
   }, [selectedWatchlistId, date]);
@@ -132,17 +158,49 @@ export default function Home() {
             />
           </div>
         </div>
-        <div className="w-96 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-4 h-screen overflow-y-auto">
+        <div 
+          className="border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-4 h-screen overflow-y-auto relative"
+          style={{ width: `${rightPanelWidth}px`, minWidth: '280px', maxWidth: '50vw' }}
+        >
+          {/* Resize handle */}
+          <div 
+            className="absolute left-0 top-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-blue-500 transition-colors"
+            onMouseDown={(e) => {
+              setIsResizing(true);
+              const startX = e.clientX;
+              const startWidth = rightPanelWidth;
+              
+              const handleMouseMove = (e: MouseEvent) => {
+                const deltaX = startX - e.clientX;
+                const newWidth = Math.max(280, Math.min(window.innerWidth * 0.5, startWidth + deltaX));
+                setRightPanelWidth(newWidth);
+              };
+              
+              const handleMouseUp = () => {
+                setIsResizing(false);
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+              };
+              
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+            }}
+          />
           <h2 className="text-lg font-semibold mb-2">{selectedWatchlist?.name} Components</h2>
           {loading && <div>Loading...</div>}
           {error && <div className="text-red-500">{error}</div>}
           
-          {/* Column Headers */}
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-700">
-            <div className="col-span-4">Symbol</div>
-            <div className="col-span-3 text-right">Price</div>
-            <div className="col-span-3 text-right">Change</div>
-            <div className="col-span-2 text-right">%</div>
+          {/* Column Headers - Using CSS Grid with fr units for flexible columns */}
+          <div 
+            className="grid gap-1 px-3 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-700"
+            style={{
+              gridTemplateColumns: 'minmax(60px, 1fr) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
+            }}
+          >
+            <div className="text-left">Symbol</div>
+            <div className="text-left">Price</div>
+            <div className="text-left">Change</div>
+            <div className="text-left">%</div>
           </div>
           
           <ul className="flex flex-col gap-1">
@@ -168,26 +226,29 @@ export default function Home() {
               return (
                 <li 
                   key={(symbol || 'unknown') + idx} 
-                  className={`grid grid-cols-12 gap-2 rounded px-3 py-2 cursor-pointer transition-colors ${
+                  className={`grid gap-1 rounded px-3 py-2 cursor-pointer transition-colors ${
                     isSelected 
                       ? 'bg-blue-500 text-white' 
                       : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700'
                   }`}
+                  style={{
+                    gridTemplateColumns: 'minmax(60px, 1fr) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
+                  }}
                   onClick={() => {
                     console.log('Symbol clicked:', symbol);
                     setSelectedSymbol(symbol || null);
                   }}
                 >
-                  <div className="col-span-4 font-medium">
+                  <div className="font-medium text-left truncate">
                     {symbol || 'Unknown'}
                   </div>
-                  <div className="col-span-3 text-right text-sm">
+                  <div className="text-left text-sm whitespace-nowrap">
                     {lastPrice ? `$${lastPrice.toFixed(2)}` : '-'}
                   </div>
-                  <div className={`col-span-3 text-right text-sm ${isSelected ? 'text-white' : changeColor}`}>
+                  <div className={`text-left text-sm whitespace-nowrap ${isSelected ? 'text-white' : changeColor}`}>
                     {priceChange ? `${isPositive ? '+' : ''}${priceChange.toFixed(2)}` : '-'}
                   </div>
-                  <div className={`col-span-2 text-right text-sm ${isSelected ? 'text-white' : changeColor}`}>
+                  <div className={`text-left text-sm whitespace-nowrap ${isSelected ? 'text-white' : changeColor}`}>
                     {percentChange ? `${isPositive ? '+' : ''}${percentChange.toFixed(1)}%` : '-'}
                   </div>
                 </li>
