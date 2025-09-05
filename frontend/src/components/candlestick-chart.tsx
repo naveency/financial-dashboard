@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { API_ENDPOINTS } from '../lib/api-config';
 
 interface CandlestickData {
   time: string;
@@ -16,6 +17,7 @@ interface CandlestickData {
 
 interface CandlestickChartProps {
   symbol: string | null;
+  isDarkMode?: boolean;
 }
 
 type TimePeriod = '3M' | '6M' | '1Y' | '2Y' | '5Y';
@@ -30,6 +32,7 @@ const TIME_PERIODS: { label: string; value: TimePeriod; days: number }[] = [
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   symbol,
+  isDarkMode = false,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -44,6 +47,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [inputSymbol, setInputSymbol] = useState(symbol || '');
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('1Y');
   const [displaySymbol, setDisplaySymbol] = useState(symbol);
+  
+  // OHLCV display state
+  const [selectedOHLCV, setSelectedOHLCV] = useState<CandlestickData | null>(null);
+  const [chartData, setChartData] = useState<CandlestickData[]>([]);
 
   // Initialize chart when symbol is selected and container is ready
   useEffect(() => {
@@ -62,43 +69,36 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     const initChart = () => {
       if (!chartContainerRef.current) {
-        console.log('Chart container not ready yet');
         return null;
       }
 
-      console.log('Initializing chart for symbol:', displaySymbol, { 
-        containerWidth: chartContainerRef.current.clientWidth,
-        containerHeight: chartContainerRef.current.clientHeight 
-      });
-      
       // Ensure container has dimensions
       if (chartContainerRef.current.clientWidth === 0) {
-        console.log('Container width is 0, cannot initialize chart');
         return null;
       }
 
       const containerHeight = chartContainerRef.current.clientHeight || 600; // fallback height
-      
-      console.log('Creating chart with dimensions:', {
-        width: chartContainerRef.current.clientWidth,
-        height: containerHeight
-      });
     
       // Create chart
       const chart = createChart(chartContainerRef.current, {
         layout: {
           background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: '#d1d5db',
+          textColor: isDarkMode ? '#d1d5db' : '#374151',
         },
         grid: {
-          vertLines: { color: '#374151' },
-          horzLines: { color: '#374151' },
+          vertLines: { color: isDarkMode ? '#374151' : '#e5e7eb' },
+          horzLines: { color: isDarkMode ? '#374151' : '#e5e7eb' },
         },
         width: chartContainerRef.current.clientWidth,
         height: containerHeight,
         timeScale: {
           timeVisible: true,
           secondsVisible: false,
+        },
+        rightPriceScale: {
+          borderVisible: false,
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+          minimumWidth: 80, // Provide more space for EMA labels
         },
       });
 
@@ -113,24 +113,26 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       // Create volume series
       const volumeSeries = chart.addHistogramSeries({
-        color: '#6b7280',
+        color: isDarkMode ? '#6b7280' : '#9ca3af',
         priceFormat: {
           type: 'volume',
         },
         priceScaleId: 'volume',
       });
 
-      // Create EMA line series
+      // Create EMA line series with last values visible but no titles
       const ema21Series = chart.addLineSeries({
         color: '#ff6b35', // Orange color for 21 EMA
         lineWidth: 2,
-        title: 'EMA 21',
+        lastValueVisible: true, // Show last value on right edge
+        priceLineVisible: false, // Remove horizontal price lines to reduce clutter
       });
 
       const ema200Series = chart.addLineSeries({
         color: '#1e40af', // Blue color for 200 EMA
         lineWidth: 2,
-        title: 'EMA 200',
+        lastValueVisible: true, // Show last value on right edge
+        priceLineVisible: false, // Remove horizontal price lines to reduce clutter
       });
 
       // Set volume series to bottom pane
@@ -146,12 +148,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       volumeSeriesRef.current = volumeSeries;
       ema21SeriesRef.current = ema21Series;
       ema200SeriesRef.current = ema200Series;
-      
-      console.log('Chart initialized successfully', {
-        hasChart: !!chart,
-        hasCandlestickSeries: !!candlestickSeries,
-        hasVolumeSeries: !!volumeSeries
-      });
 
       // Handle resize
       const handleResize = () => {
@@ -166,7 +162,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       // Define and call fetchData function
       const fetchData = async () => {
-        console.log(`Fetching price data for symbol: ${displaySymbol}`);
         setLoading(true);
         setError(null);
 
@@ -174,8 +169,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         const days = selectedPeriodData?.days || 365;
 
         try {
-          const url = `http://127.0.0.1:8080/price-data/${displaySymbol}?days=${days}`;
-          console.log(`Making API call to: ${url}`);
+          const url = `${API_ENDPOINTS.priceData}/${displaySymbol}?days=${days}`;
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -186,6 +180,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           if (data.length === 0) {
             throw new Error('No price data available');
           }
+
+          // Store the original data for OHLCV display
+          setChartData(data);
 
           // Convert data for TradingView format
           const candlestickData = data.map(item => ({
@@ -223,10 +220,29 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           ema21Series.setData(ema21Data);
           ema200Series.setData(ema200Data);
 
+          // Add crosshair move handler for OHLCV display
+          chart.subscribeCrosshairMove((param) => {
+            if (param.time) {
+              // Find the data point that matches the crosshair time
+              const matchingData = data.find(item => item.time === param.time);
+              if (matchingData) {
+                setSelectedOHLCV(matchingData);
+              }
+            } else {
+              // Show the latest data point when crosshair is not active
+              if (data.length > 0) {
+                setSelectedOHLCV(data[data.length - 1]);
+              }
+            }
+          });
+
+          // Set initial OHLCV to latest data point
+          if (data.length > 0) {
+            setSelectedOHLCV(data[data.length - 1]);
+          }
+
           // Fit content
           chart.timeScale().fitContent();
-
-          console.log(`Successfully loaded ${data.length} data points, ${ema21Data.length} EMA21 points, ${ema200Data.length} EMA200 points for ${displaySymbol}`);
 
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -259,7 +275,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ema200SeriesRef.current = null;
       }
     };
-  }, [displaySymbol, selectedPeriod]);
+  }, [displaySymbol, selectedPeriod, isDarkMode]);
 
   // Handle symbol input and search
   const handleSymbolSearch = () => {
@@ -377,10 +393,69 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           </select>
         </div>
 
-        {/* Symbol title */}
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
-          {displaySymbol || symbol}
-        </h3>
+        {/* Symbol title and OHLCV data */}
+        <div className="flex items-start justify-between">
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
+            {displaySymbol || symbol}
+          </h3>
+          
+          {selectedOHLCV && (
+            <div className="flex gap-4 text-sm">
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Date</span>
+                <span className="font-medium text-zinc-900 dark:text-white">
+                  {new Date(selectedOHLCV.time).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">O</span>
+                <span className="font-medium text-zinc-900 dark:text-white">
+                  ${selectedOHLCV.open.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">H</span>
+                <span className="font-medium text-zinc-900 dark:text-white">
+                  ${selectedOHLCV.high.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">L</span>
+                <span className="font-medium text-zinc-900 dark:text-white">
+                  ${selectedOHLCV.low.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">C</span>
+                <span className="font-medium text-zinc-900 dark:text-white">
+                  ${selectedOHLCV.close.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Vol</span>
+                <span className="font-medium text-zinc-900 dark:text-white">
+                  {selectedOHLCV.volume.toLocaleString()}
+                </span>
+              </div>
+              {selectedOHLCV.ema_21 && (
+                <div className="flex flex-col">
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">EMA21</span>
+                  <span className="font-medium" style={{ color: '#ff6b35' }}>
+                    ${selectedOHLCV.ema_21.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {selectedOHLCV.ema_200 && (
+                <div className="flex flex-col">
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">EMA200</span>
+                  <span className="font-medium" style={{ color: '#1e40af' }}>
+                    ${selectedOHLCV.ema_200.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div 

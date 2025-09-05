@@ -22,9 +22,53 @@ export default function Home() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [rightPanelWidth, setRightPanelWidth] = useState(384); // 24rem = 384px
   const [isResizing, setIsResizing] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // Get watchlist components from API data
   const watchlistComponents = watchlistData || [];
+
+  // Theme detection and initialization - client-only to avoid hydration issues
+  useEffect(() => {
+    setMounted(true);
+    
+    // Check if user has a saved theme preference
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      const isDark = savedTheme === 'dark';
+      setIsDarkMode(isDark);
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } else {
+      // Auto-detect system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDarkMode(prefersDark);
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      localStorage.setItem('theme', prefersDark ? 'dark' : 'light');
+    }
+  }, []);
+
+  // Apply theme changes to document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+  };
 
   useEffect(() => {
     // On mount, fetch the max date from the API and set it as the date
@@ -112,7 +156,6 @@ export default function Home() {
         return res.json();
       })
       .then(data => {
-        console.log('Watchlist data received:', data);
         const dataArray = Array.isArray(data) ? data : [];
         setWatchlistData(dataArray);
         
@@ -139,29 +182,37 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, [selectedWatchlistId, date]);
 
+  // Prevent hydration issues by not rendering theme-dependent content until mounted
+  if (!mounted) {
+    return <div className="flex flex-col min-h-screen bg-white"><div className="flex justify-end items-center p-4"><div className="w-8 h-8"></div></div></div>;
+  }
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <SidebarWithDateAndWatchlists
-          selectedWatchlistId={selectedWatchlistId}
-          onSelectWatchlist={setSelectedWatchlistId}
-          date={date}
-          setDate={setDate}
-        />
-      </aside>
-      <main className="flex-1 flex">
-        <div className="flex-1 flex">
-          {/* Candlestick chart */}
-          <div className="flex-1 flex flex-col p-4">
-            <CandlestickChart 
-              symbol={selectedSymbol}
-            />
+    <div className="flex min-h-screen bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+        <aside className="w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <SidebarWithDateAndWatchlists
+            selectedWatchlistId={selectedWatchlistId}
+            onSelectWatchlist={setSelectedWatchlistId}
+            date={date}
+            setDate={setDate}
+            isDarkMode={isDarkMode}
+            toggleTheme={toggleTheme}
+          />
+        </aside>
+        <main className="flex-1 flex">
+          <div className="flex-1 flex">
+            {/* Candlestick chart */}
+            <div className="flex-1 flex flex-col p-4 bg-white dark:bg-zinc-900">
+              <CandlestickChart 
+                symbol={selectedSymbol}
+                isDarkMode={isDarkMode}
+              />
+            </div>
           </div>
-        </div>
-        <div 
-          className="border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-4 h-screen overflow-y-auto relative"
-          style={{ width: `${rightPanelWidth}px`, minWidth: '280px', maxWidth: '50vw' }}
-        >
+          <div 
+            className="border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-4 h-screen overflow-y-auto relative"
+            style={{ width: `${rightPanelWidth}px`, minWidth: '280px', maxWidth: '50vw' }}
+          >
           {/* Resize handle */}
           <div 
             className="absolute left-0 top-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-blue-500 transition-colors"
@@ -194,7 +245,7 @@ export default function Home() {
           <div 
             className="grid gap-1 px-3 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-700"
             style={{
-              gridTemplateColumns: 'minmax(60px, 1fr) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
+              gridTemplateColumns: 'minmax(60px, auto) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
             }}
           >
             <div className="text-left">Symbol</div>
@@ -232,10 +283,9 @@ export default function Home() {
                       : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700'
                   }`}
                   style={{
-                    gridTemplateColumns: 'minmax(60px, 1fr) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
+                    gridTemplateColumns: 'minmax(60px, auto) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
                   }}
                   onClick={() => {
-                    console.log('Symbol clicked:', symbol);
                     setSelectedSymbol(symbol || null);
                   }}
                 >

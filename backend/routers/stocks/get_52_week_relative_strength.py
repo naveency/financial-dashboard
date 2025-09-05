@@ -3,11 +3,11 @@ from datetime import datetime
 from typing import List
 import logging
 from database import execute_query
-from models import SymbolTypeResponse
+from models import SymbolWithPriceResponse
 
 router = APIRouter()
 
-@router.get("/relative-strength/52-week", response_model=List[SymbolTypeResponse])
+@router.get("/52-week-relative-strength", response_model=List[SymbolWithPriceResponse])
 async def get_52_week_relative_strength(
     date: str = Query(..., description="Date to check for 52-week RS high (YYYY-MM-DD)"),
     limit: int = Query(None, description="Maximum number of records to return. If not set, return all.")
@@ -18,10 +18,24 @@ async def get_52_week_relative_strength(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
         base_query = """
-        SELECT symbol, type
-        FROM stock_data_daily
-        WHERE date = ? AND is_rs_52_week_high = 1
-        ORDER BY rs DESC NULLS LAST
+        SELECT 
+            current.symbol, 
+            current.type, 
+            current.close as last_price,
+            prev.close as prev_close,
+            (current.close - prev.close) as price_change,
+            CASE 
+                WHEN prev.close > 0 THEN ((current.close - prev.close) / prev.close) * 100.0
+                ELSE NULL 
+            END as percent_change
+        FROM stock_data_daily current
+        LEFT JOIN stock_data_daily prev ON current.symbol = prev.symbol 
+            AND prev.date = (
+                SELECT MAX(date) FROM stock_data_daily 
+                WHERE symbol = current.symbol AND date < current.date
+            )
+        WHERE current.date = ? AND current.is_rs_52_week_high = 1
+        ORDER BY current.rs DESC NULLS LAST
         """
         params = [date]
         if limit is not None:
@@ -30,7 +44,16 @@ async def get_52_week_relative_strength(
         results = execute_query(base_query, tuple(params))
         if not results:
             raise HTTPException(status_code=404, detail=f"No 52-week RS high data found for {date}")
-        return [SymbolTypeResponse(**row) for row in results]
+        return [
+            SymbolWithPriceResponse(
+                symbol=row['symbol'],
+                type=row['type'],
+                last_price=row['last_price'],
+                prev_close=row['prev_close'],
+                price_change=row['price_change'],
+                percent_change=row['percent_change']
+            ) for row in results
+        ]
     except HTTPException:
         raise
     except Exception as e:
