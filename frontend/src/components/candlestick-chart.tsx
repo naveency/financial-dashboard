@@ -28,14 +28,26 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Initialize chart when symbol is selected and container is ready
   useEffect(() => {
+    if (!symbol) {
+      // Clean up existing chart when no symbol is selected
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+        candlestickSeriesRef.current = null;
+        volumeSeriesRef.current = null;
+      }
+      return;
+    }
+
     const initChart = () => {
       if (!chartContainerRef.current) {
         console.log('Chart container not ready yet');
         return null;
       }
 
-      console.log('Initializing chart...', { 
+      console.log('Initializing chart for symbol:', symbol, { 
         containerWidth: chartContainerRef.current.clientWidth,
         containerHeight: chartContainerRef.current.clientHeight 
       });
@@ -105,34 +117,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         hasVolumeSeries: !!volumeSeries
       });
 
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current && chartRef.current) {
+          chartRef.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+          });
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+
       return chart;
     };
 
-    // Try to initialize immediately
-    const chart = initChart();
-    
-    // If initialization failed, try again after a short delay
-    if (!chart) {
-      console.log('Initial chart initialization failed, retrying...');
-      const timer = setTimeout(() => {
-        initChart();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
+    // Small delay to ensure the DOM has rendered the chart container
+    const timer = setTimeout(() => {
+      initChart();
+    }, 50);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      clearTimeout(timer);
+      window.removeEventListener('resize', () => {});
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
@@ -140,7 +146,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         volumeSeriesRef.current = null;
       }
     };
-  }, [height]);
+  }, [symbol, height]);
 
   useEffect(() => {
     if (!symbol || !candlestickSeriesRef.current || !volumeSeriesRef.current) {
