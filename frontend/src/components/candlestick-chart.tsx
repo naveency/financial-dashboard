@@ -128,6 +128,61 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       window.addEventListener('resize', handleResize);
 
+      // Define and call fetchData function
+      const fetchData = async () => {
+        console.log(`Fetching price data for symbol: ${symbol}`);
+        setLoading(true);
+        setError(null);
+
+        try {
+          const url = `http://127.0.0.1:8080/price-data/${symbol}?days=90`;
+          console.log(`Making API call to: ${url}`);
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const data: CandlestickData[] = await response.json();
+          
+          if (data.length === 0) {
+            throw new Error('No price data available');
+          }
+
+          // Convert data for TradingView format
+          const candlestickData = data.map(item => ({
+            time: item.time,
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
+          }));
+
+          const volumeData = data.map(item => ({
+            time: item.time,
+            value: item.volume,
+            color: item.close > item.open ? '#22c55e40' : '#ef444440',
+          }));
+
+          // Set data to series
+          candlestickSeries.setData(candlestickData);
+          volumeSeries.setData(volumeData);
+
+          // Fit content
+          chart.timeScale().fitContent();
+
+          console.log(`Successfully loaded ${data.length} data points for ${symbol}`);
+
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch data');
+          console.error('Error fetching price data:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // Now fetch data for the symbol
+      fetchData();
+
       return chart;
     };
 
@@ -148,64 +203,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     };
   }, [symbol, height]);
 
-  useEffect(() => {
-    if (!symbol || !candlestickSeriesRef.current || !volumeSeriesRef.current) {
-      console.log('Chart useEffect: Missing dependencies', { symbol, hasCandlestickSeries: !!candlestickSeriesRef.current, hasVolumeSeries: !!volumeSeriesRef.current });
-      return;
-    }
-
-    const fetchData = async () => {
-      console.log(`Fetching price data for symbol: ${symbol}`);
-      setLoading(true);
-      setError(null);
-
-      try {
-        const url = `http://127.0.0.1:8080/price-data/${symbol}?days=90`;
-        console.log(`Making API call to: ${url}`);
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data: CandlestickData[] = await response.json();
-        
-        if (data.length === 0) {
-          throw new Error('No price data available');
-        }
-
-        // Convert data for TradingView format
-        const candlestickData = data.map(item => ({
-          time: item.time,
-          open: item.open,
-          high: item.high,
-          low: item.low,
-          close: item.close,
-        }));
-
-        const volumeData = data.map(item => ({
-          time: item.time,
-          value: item.volume,
-          color: item.close > item.open ? '#22c55e40' : '#ef444440',
-        }));
-
-        // Set data to series
-        candlestickSeriesRef.current!.setData(candlestickData);
-        volumeSeriesRef.current!.setData(volumeData);
-
-        // Fit content
-        if (chartRef.current) {
-          chartRef.current.timeScale().fitContent();
-        }
-
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [symbol]);
 
   if (!symbol) {
     return (
