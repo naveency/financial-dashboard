@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { API_ENDPOINTS } from '../lib/api-config';
 import { getRealtimeService, RealtimePrice } from '../lib/realtime-data';
-import { shouldEnableRealtimeData, getMarketStatusDisplay } from '../lib/market-hours';
+import { shouldEnableRealtimeData, getMarketStatusDisplay, shouldEnableRealtimeDataSync, getMarketStatusDisplaySync } from '../lib/market-hours';
 
 interface CandlestickData {
   time: string;
@@ -189,12 +189,30 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             throw new Error('No price data available');
           }
 
+
           // Store the original data for OHLCV display
           setChartData(data);
 
           // Convert data for TradingView format
+          // Helper functions to ensure consistent timestamp conversion
+          const convertToTimestamp = (dateString: string): number => {
+            // Parse as local date to avoid timezone shifts
+            const [year, month, day] = dateString.split('-').map(Number);
+            const date = new Date(year, month - 1, day); // month is 0-indexed
+            return Math.floor(date.getTime() / 1000); // Convert to Unix timestamp
+          };
+
+          const convertFromTimestamp = (timestamp: number): string => {
+            // Convert back using same local date logic
+            const date = new Date(timestamp * 1000);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          };
+
           const candlestickData = data.map(item => ({
-            time: item.time,
+            time: convertToTimestamp(item.time),
             open: item.open,
             high: item.high,
             low: item.low,
@@ -202,7 +220,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           }));
 
           const volumeData = data.map(item => ({
-            time: item.time,
+            time: convertToTimestamp(item.time),
             value: item.volume,
             color: item.close > item.open ? '#22c55e40' : '#ef444440',
           }));
@@ -211,16 +229,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           const ema21Data = data
             .filter(item => item.ema_21 !== null && item.ema_21 !== undefined)
             .map(item => ({
-              time: item.time,
+              time: convertToTimestamp(item.time),
               value: item.ema_21!,
             }));
 
           const ema200Data = data
             .filter(item => item.ema_200 !== null && item.ema_200 !== undefined)
             .map(item => ({
-              time: item.time,
+              time: convertToTimestamp(item.time),
               value: item.ema_200!,
             }));
+
 
           // Set data to series
           candlestickSeries.setData(candlestickData);
@@ -231,8 +250,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           // Add crosshair move handler for OHLCV display
           chart.subscribeCrosshairMove((param) => {
             if (param.time) {
-              // Find the data point that matches the crosshair time
-              const matchingData = data.find(item => item.time === param.time);
+              // Convert the timestamp back to date string using our helper function
+              const paramTimestamp = typeof param.time === 'number' ? param.time : parseInt(param.time as string);
+              const paramDateString = convertFromTimestamp(paramTimestamp);
+              
+              // Find the data point that matches the crosshair date
+              const matchingData = data.find(item => item.time === paramDateString);
               if (matchingData) {
                 setSelectedOHLCV(matchingData);
               }
@@ -310,18 +333,32 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   useEffect(() => {
     const realtimeService = getRealtimeService();
     
-    // Check if realtime should be enabled
-    const shouldEnable = shouldEnableRealtimeData();
-    setIsRealtimeEnabled(shouldEnable);
-    setMarketStatus(getMarketStatusDisplay());
+    // Check market status using EODHD API (async)
+    const checkMarketStatus = async () => {
+      // Use the proper async version to get EODHD data
+      const shouldEnable = await shouldEnableRealtimeData();
+      
+      // Force enable realtime for specific symbols in development
+      const isDemoSymbol = ['AAPL', 'MSFT', 'TSLA'].includes(displaySymbol?.toUpperCase() || '');
+      const forceEnable = process.env.NODE_ENV === 'development' && isDemoSymbol;
+      
+      const realtimeEnabled = shouldEnable || forceEnable;
+      setIsRealtimeEnabled(realtimeEnabled);
+      setMarketStatus(await getMarketStatusDisplay());
+      
+      
+      return realtimeEnabled;
+    };
     
-    if (!shouldEnable || !displaySymbol) {
-      // Clean up any existing connections
-      if (realtimeService.getStatus() === 'connected') {
-        realtimeService.unsubscribeFromSymbol(displaySymbol || '');
+    // Execute async market status check
+    checkMarketStatus().then((realtimeEnabled) => {
+      if (!realtimeEnabled || !displaySymbol) {
+        // Clean up any existing connections
+        if (realtimeService.getStatus() === 'connected') {
+          realtimeService.unsubscribeFromSymbol(displaySymbol || '');
+        }
+        return;
       }
-      return;
-    }
 
     // Set up realtime data callbacks
     realtimeService.onData((data: RealtimePrice) => {
@@ -329,33 +366,84 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         setLastPrice(data.price);
         
         // Update the chart with realtime price
-        if (candlestickSeriesRef.current && chartData.length > 0) {
-          const lastCandle = chartData[chartData.length - 1];
-          const currentTime = new Date().toISOString().split('T')[0]; // Get current date
+        if (candlestickSeriesRef.current) {
+          const currentDate = new Date().toISOString().split('T')[0]; // Get current date (YYYY-MM-DD)
+          const currentTimestamp = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000); // Today's timestamp
           
-          // If it's the same day as the last candle, update it
-          if (lastCandle.time === currentTime) {
-            const updatedCandle = {
-              ...lastCandle,
+          if (chartData.length > 0) {
+            const lastCandle = chartData[chartData.length - 1];
+            
+            // If it's the same day as the last candle, update it
+            if (lastCandle.time === currentDate) {
+              const updatedCandle = {
+                ...lastCandle,
+                close: data.price,
+                high: Math.max(lastCandle.high, data.price),
+                low: Math.min(lastCandle.low, data.price),
+              };
+              
+              candlestickSeriesRef.current.update({
+                time: currentTimestamp,
+                open: updatedCandle.open,
+                high: updatedCandle.high,
+                low: updatedCandle.low,
+                close: updatedCandle.close,
+              });
+              
+              // Update our local data too
+              const newChartData = [...chartData];
+              newChartData[newChartData.length - 1] = updatedCandle;
+              setChartData(newChartData);
+            } else {
+              // Create a new candle for today
+              const previousClose = lastCandle.close;
+              const newCandle = {
+                time: currentDate,
+                open: previousClose, // Use previous close as today's open
+                high: Math.max(previousClose, data.price),
+                low: Math.min(previousClose, data.price),
+                close: data.price,
+                volume: 0, // We don't have volume from price updates
+              };
+              
+              candlestickSeriesRef.current.update({
+                time: currentTimestamp,
+                open: newCandle.open,
+                high: newCandle.high,
+                low: newCandle.low,
+                close: newCandle.close,
+              });
+              
+              // Add to our local data
+              const newChartData = [...chartData, newCandle];
+              setChartData(newChartData);
+            }
+          } else {
+            // No historical data - create first candle
+            const newCandle = {
+              time: currentDate,
+              open: data.price,
+              high: data.price,
+              low: data.price,
               close: data.price,
-              high: Math.max(lastCandle.high, data.price),
-              low: Math.min(lastCandle.low, data.price),
+              volume: 0,
             };
             
             candlestickSeriesRef.current.update({
-              time: updatedCandle.time,
-              open: updatedCandle.open,
-              high: updatedCandle.high,
-              low: updatedCandle.low,
-              close: updatedCandle.close,
+              time: currentTimestamp,
+              open: newCandle.open,
+              high: newCandle.high,
+              low: newCandle.low,
+              close: newCandle.close,
             });
+            
+            setChartData([newCandle]);
           }
         }
       }
     });
 
     realtimeService.onError((error: Error) => {
-      console.error('Realtime data error:', error);
       setRealtimeStatus('error');
     });
 
@@ -363,15 +451,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       setRealtimeStatus(status);
     });
 
-    // Connect and subscribe
-    realtimeService.connect()
-      .then(() => {
-        realtimeService.subscribeToSymbol(displaySymbol);
-      })
-      .catch((error) => {
-        console.error('Failed to connect to realtime service:', error);
-        setRealtimeStatus('error');
-      });
+      // Connect and subscribe
+      realtimeService.connect()
+        .then(() => {
+          realtimeService.subscribeToSymbol(displaySymbol);
+        })
+        .catch((error) => {
+          setRealtimeStatus('error');
+        });
+    });
 
     // Cleanup function
     return () => {
@@ -483,20 +571,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               {displaySymbol || symbol}
             </h3>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                {marketStatus}
-              </span>
               {isRealtimeEnabled && (
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {marketStatus}
+                </span>
+              )}
+              {isRealtimeEnabled && realtimeStatus === 'connected' && (
                 <div className="flex items-center gap-1">
-                  <div className={`w-2 h-2 rounded-full ${
-                    realtimeStatus === 'connected' ? 'bg-green-500' :
-                    realtimeStatus === 'connecting' ? 'bg-yellow-500' :
-                    realtimeStatus === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                  }`} />
-                  <span className="text-xs text-zinc-400">
-                    {realtimeStatus === 'connected' ? 'Live' :
-                     realtimeStatus === 'connecting' ? 'Connecting...' :
-                     realtimeStatus === 'error' ? 'Error' : 'Offline'}
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="text-xs text-green-500 font-medium">
+                    Live
                   </span>
                 </div>
               )}
@@ -513,7 +597,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               <div className="flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Date</span>
                 <span className="font-medium text-zinc-900 dark:text-white">
-                  {new Date(selectedOHLCV.time).toLocaleDateString()}
+                  {(() => {
+                    const [year, month, day] = selectedOHLCV.time.split('-');
+                    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day)).toLocaleDateString();
+                  })()}
                 </span>
               </div>
               <div className="flex flex-col">

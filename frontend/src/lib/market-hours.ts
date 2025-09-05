@@ -1,7 +1,9 @@
 /**
  * Market hours utility functions
- * Handles US stock market trading hours including pre-market and after-hours
+ * Uses EODHD API for accurate market hours and holidays, with fallback to hardcoded values
  */
+
+import { getMarketHoursService, MarketSession } from './eodhd-market-hours';
 
 export interface MarketHours {
   isOpen: boolean;
@@ -14,16 +16,103 @@ export interface MarketHours {
 }
 
 /**
- * Check if the current time is within market hours
- * US Market Hours (EST):
- * - Pre-market: 4:00 AM - 9:30 AM
- * - Regular hours: 9:30 AM - 4:00 PM
- * - After-hours: 4:00 PM - 8:00 PM
+ * Parse time string (HH:MM) to minutes since midnight
  */
-export function getMarketHours(date?: Date): MarketHours {
+function parseTimeToMinutes(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/**
+ * Get market hours using EODHD API data with fallback to hardcoded values
+ */
+export async function getMarketHours(date?: Date): Promise<MarketHours> {
+  const now = date || new Date();
+  const marketHoursService = getMarketHoursService();
+  
+  // Get market timezone from EODHD (defaults to America/New_York)
+  const timezone = await marketHoursService.getMarketTimezone();
+  const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+  const dayOfWeek = localTime.getDay(); // 0 = Sunday, 6 = Saturday
+  
+  // Check if it's a weekend
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  
+  if (isWeekend) {
+    return {
+      isOpen: false,
+      isPreMarket: false,
+      isAfterHours: false,
+      isRegularHours: false,
+      marketStatus: 'closed'
+    };
+  }
+  
+  // Check if it's a market holiday
+  const isHoliday = await marketHoursService.isMarketHoliday(now);
+  if (isHoliday) {
+    return {
+      isOpen: false,
+      isPreMarket: false,
+      isAfterHours: false,
+      isRegularHours: false,
+      marketStatus: 'closed'
+    };
+  }
+  
+  const hours = localTime.getHours();
+  const minutes = localTime.getMinutes();
+  const currentTime = hours * 60 + minutes; // Convert to minutes since midnight
+  
+  // Get market sessions from EODHD API
+  const sessions = await marketHoursService.getMarketSessions();
+  
+  let marketStatus: MarketHours['marketStatus'] = 'closed';
+  let isOpen = false;
+  let isPreMarket = false;
+  let isRegularHours = false;
+  let isAfterHours = false;
+  
+  // Check which session we're currently in
+  for (const session of sessions) {
+    const sessionStart = parseTimeToMinutes(session.start);
+    const sessionEnd = parseTimeToMinutes(session.end);
+    
+    if (currentTime >= sessionStart && currentTime < sessionEnd) {
+      marketStatus = session.type;
+      isOpen = true;
+      
+      switch (session.type) {
+        case 'pre-market':
+          isPreMarket = true;
+          break;
+        case 'regular':
+          isRegularHours = true;
+          break;
+        case 'after-hours':
+          isAfterHours = true;
+          break;
+      }
+      break;
+    }
+  }
+  
+  return {
+    isOpen,
+    isPreMarket,
+    isAfterHours,
+    isRegularHours,
+    marketStatus
+  };
+}
+
+/**
+ * Synchronous version with cached data for immediate use
+ */
+export function getMarketHoursSync(date?: Date): MarketHours {
   const now = date || new Date();
   
-  // Convert to EST/EDT
+  // Convert to EST/EDT as fallback
   const estTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
   const dayOfWeek = estTime.getDay(); // 0 = Sunday, 6 = Saturday
   
@@ -44,11 +133,10 @@ export function getMarketHours(date?: Date): MarketHours {
   const minutes = estTime.getMinutes();
   const currentTime = hours * 60 + minutes; // Convert to minutes since midnight
   
-  // Market hours in minutes since midnight (EST)
-  const preMarketStart = 4 * 60;     // 4:00 AM
+  // Default US market hours in minutes since midnight (EST)
+  // NOTE: When EODHD API fails, we'll be more conservative and only consider regular hours as "open"
   const regularStart = 9 * 60 + 30;  // 9:30 AM
   const regularEnd = 16 * 60;        // 4:00 PM
-  const afterHoursEnd = 20 * 60;     // 8:00 PM
   
   let marketStatus: MarketHours['marketStatus'] = 'closed';
   let isOpen = false;
@@ -56,25 +144,27 @@ export function getMarketHours(date?: Date): MarketHours {
   let isRegularHours = false;
   let isAfterHours = false;
   
-  if (currentTime >= preMarketStart && currentTime < regularStart) {
-    // Pre-market hours
-    marketStatus = 'pre-market';
-    isOpen = true;
-    isPreMarket = true;
-  } else if (currentTime >= regularStart && currentTime < regularEnd) {
-    // Regular trading hours
+  if (currentTime >= regularStart && currentTime < regularEnd) {
+    // Regular trading hours only (conservative fallback)
     marketStatus = 'regular';
     isOpen = true;
     isRegularHours = true;
-  } else if (currentTime >= regularEnd && currentTime < afterHoursEnd) {
-    // After-hours trading
-    marketStatus = 'after-hours';
-    isOpen = true;
-    isAfterHours = true;
   } else {
-    // Market closed
+    // Market closed (conservative approach when API data unavailable)
     marketStatus = 'closed';
     isOpen = false;
+    
+    // Still categorize the time periods for display purposes
+    const preMarketStart = 4 * 60;     // 4:00 AM
+    const afterHoursEnd = 20 * 60;     // 8:00 PM
+    
+    if (currentTime >= preMarketStart && currentTime < regularStart) {
+      marketStatus = 'pre-market';
+      isPreMarket = true;
+    } else if (currentTime >= regularEnd && currentTime < afterHoursEnd) {
+      marketStatus = 'after-hours';
+      isAfterHours = true;
+    }
   }
   
   return {
@@ -87,19 +177,29 @@ export function getMarketHours(date?: Date): MarketHours {
 }
 
 /**
- * Check if realtime data should be enabled
+ * Check if realtime data should be enabled (async version with EODHD API)
  * Only enable during market hours (including pre-market and after-hours)
  */
-export function shouldEnableRealtimeData(date?: Date): boolean {
-  const marketHours = getMarketHours(date);
+export async function shouldEnableRealtimeData(date?: Date): Promise<boolean> {
+  const marketHours = await getMarketHours(date);
+  
+  
   return marketHours.isOpen;
 }
 
 /**
- * Get market status display string
+ * Synchronous version for immediate use (uses cached data or fallback)
  */
-export function getMarketStatusDisplay(date?: Date): string {
-  const marketHours = getMarketHours(date);
+export function shouldEnableRealtimeDataSync(date?: Date): boolean {
+  const marketHours = getMarketHoursSync(date);
+  return marketHours.isOpen;
+}
+
+/**
+ * Get market status display string (async version with EODHD API)
+ */
+export async function getMarketStatusDisplay(date?: Date): Promise<string> {
+  const marketHours = await getMarketHours(date);
   
   switch (marketHours.marketStatus) {
     case 'pre-market':
@@ -116,27 +216,29 @@ export function getMarketStatusDisplay(date?: Date): string {
 }
 
 /**
- * Check if today is a US market holiday
- * This is a simplified version - in production you'd want to use a comprehensive holiday API
+ * Synchronous version for immediate use
  */
-export function isMarketHoliday(date?: Date): boolean {
-  const checkDate = date || new Date();
-  const month = checkDate.getMonth() + 1; // JavaScript months are 0-based
-  const day = checkDate.getDate();
+export function getMarketStatusDisplaySync(date?: Date): string {
+  const marketHours = getMarketHoursSync(date);
   
-  // Common US market holidays (simplified)
-  const holidays = [
-    { month: 1, day: 1 },   // New Year's Day
-    { month: 7, day: 4 },   // Independence Day
-    { month: 12, day: 25 }, // Christmas Day
-    // Note: This is simplified. Real implementation should include:
-    // - Martin Luther King Jr. Day (3rd Monday in January)
-    // - Presidents' Day (3rd Monday in February)
-    // - Good Friday (varies)
-    // - Memorial Day (last Monday in May)
-    // - Labor Day (1st Monday in September)
-    // - Thanksgiving (4th Thursday in November)
-  ];
-  
-  return holidays.some(holiday => holiday.month === month && holiday.day === day);
+  switch (marketHours.marketStatus) {
+    case 'pre-market':
+      return 'Pre-Market';
+    case 'regular':
+      return 'Market Open';
+    case 'after-hours':
+      return 'After Hours';
+    case 'closed':
+      return 'Market Closed';
+    default:
+      return 'Unknown';
+  }
+}
+
+/**
+ * Check if today is a US market holiday using EODHD API
+ */
+export async function isMarketHoliday(date?: Date): Promise<boolean> {
+  const marketHoursService = getMarketHoursService();
+  return await marketHoursService.isMarketHoliday(date);
 }
