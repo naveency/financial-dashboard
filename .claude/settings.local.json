@@ -9,7 +9,10 @@
       "Bash(python:*)",
       "Bash(curl:*)",
       "WebFetch(domain:stocks.navsang.com)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(git push:*)",
+      "Bash(git remote add:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { API_ENDPOINTS } from '../lib/api-config';
+import { getRealtimeService, RealtimePrice } from '../lib/realtime-data';
+import { shouldEnableRealtimeData, getMarketStatusDisplay } from '../lib/market-hours';
 
 interface CandlestickData {
   time: string;
@@ -51,6 +53,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   // OHLCV display state
   const [selectedOHLCV, setSelectedOHLCV] = useState<CandlestickData | null>(null);
   const [chartData, setChartData] = useState<CandlestickData[]>([]);
+  
+  // Realtime data state
+  const [isRealtimeEnabled, setIsRealtimeEnabled] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+  const [lastPrice, setLastPrice] = useState<number | null>(null);
+  const [marketStatus, setMarketStatus] = useState<string>('');
 
   // Initialize chart when symbol is selected and container is ready
   useEffect(() => {
@@ -298,6 +306,81 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
   }, [symbol]);
 
+  // Realtime data management
+  useEffect(() => {
+    const realtimeService = getRealtimeService();
+    
+    // Check if realtime should be enabled
+    const shouldEnable = shouldEnableRealtimeData();
+    setIsRealtimeEnabled(shouldEnable);
+    setMarketStatus(getMarketStatusDisplay());
+    
+    if (!shouldEnable || !displaySymbol) {
+      // Clean up any existing connections
+      if (realtimeService.getStatus() === 'connected') {
+        realtimeService.unsubscribeFromSymbol(displaySymbol || '');
+      }
+      return;
+    }
+
+    // Set up realtime data callbacks
+    realtimeService.onData((data: RealtimePrice) => {
+      if (data.symbol === displaySymbol) {
+        setLastPrice(data.price);
+        
+        // Update the chart with realtime price
+        if (candlestickSeriesRef.current && chartData.length > 0) {
+          const lastCandle = chartData[chartData.length - 1];
+          const currentTime = new Date().toISOString().split('T')[0]; // Get current date
+          
+          // If it's the same day as the last candle, update it
+          if (lastCandle.time === currentTime) {
+            const updatedCandle = {
+              ...lastCandle,
+              close: data.price,
+              high: Math.max(lastCandle.high, data.price),
+              low: Math.min(lastCandle.low, data.price),
+            };
+            
+            candlestickSeriesRef.current.update({
+              time: updatedCandle.time,
+              open: updatedCandle.open,
+              high: updatedCandle.high,
+              low: updatedCandle.low,
+              close: updatedCandle.close,
+            });
+          }
+        }
+      }
+    });
+
+    realtimeService.onError((error: Error) => {
+      console.error('Realtime data error:', error);
+      setRealtimeStatus('error');
+    });
+
+    realtimeService.onStatusChange((status) => {
+      setRealtimeStatus(status);
+    });
+
+    // Connect and subscribe
+    realtimeService.connect()
+      .then(() => {
+        realtimeService.subscribeToSymbol(displaySymbol);
+      })
+      .catch((error) => {
+        console.error('Failed to connect to realtime service:', error);
+        setRealtimeStatus('error');
+      });
+
+    // Cleanup function
+    return () => {
+      if (displaySymbol) {
+        realtimeService.unsubscribeFromSymbol(displaySymbol);
+      }
+    };
+  }, [displaySymbol, chartData]);
+
   if (!symbol && !displaySymbol) {
     return (
       <div className="flex-1 flex flex-col relative">
@@ -395,9 +478,35 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
         {/* Symbol title and OHLCV data */}
         <div className="flex items-start justify-between">
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
-            {displaySymbol || symbol}
-          </h3>
+          <div className="flex flex-col">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
+              {displaySymbol || symbol}
+            </h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                {marketStatus}
+              </span>
+              {isRealtimeEnabled && (
+                <div className="flex items-center gap-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    realtimeStatus === 'connected' ? 'bg-green-500' :
+                    realtimeStatus === 'connecting' ? 'bg-yellow-500' :
+                    realtimeStatus === 'error' ? 'bg-red-500' : 'bg-gray-500'
+                  }`} />
+                  <span className="text-xs text-zinc-400">
+                    {realtimeStatus === 'connected' ? 'Live' :
+                     realtimeStatus === 'connecting' ? 'Connecting...' :
+                     realtimeStatus === 'error' ? 'Error' : 'Offline'}
+                  </span>
+                </div>
+              )}
+              {lastPrice && (
+                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                  ${lastPrice.toFixed(2)}
+                </span>
+              )}
+            </div>
+          </div>
           
           {selectedOHLCV && (
             <div className="flex gap-4 text-sm">
