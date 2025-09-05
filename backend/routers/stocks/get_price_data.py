@@ -20,11 +20,12 @@ class CandlestickData(BaseModel):
 @router.get("/price-data/{symbol}", response_model=List[CandlestickData])
 async def get_price_data(
     symbol: str,
-    days: int = Query(default=90, description="Number of days of data to return", ge=1, le=365)
+    days: int = Query(default=90, description="Number of days of data to return", ge=1)
 ):
     """
     Get OHLCV price data for a specific symbol
     Returns data in format compatible with TradingView Lightweight Charts
+    If requested days exceed available data, returns all available data
     """
     try:
         # Calculate the start date based on days parameter
