@@ -18,6 +18,16 @@ interface CandlestickChartProps {
   symbol: string | null;
 }
 
+type TimePeriod = '3M' | '6M' | '1Y' | '2Y' | '5Y';
+
+const TIME_PERIODS: { label: string; value: TimePeriod; days: number }[] = [
+  { label: '3 Months', value: '3M', days: 90 },
+  { label: '6 Months', value: '6M', days: 180 },
+  { label: '1 Year', value: '1Y', days: 365 },
+  { label: '2 Years', value: '2Y', days: 730 },
+  { label: '5 Years', value: '5Y', days: 1825 },
+];
+
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   symbol,
 }) => {
@@ -29,10 +39,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const ema200SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Input controls state
+  const [inputSymbol, setInputSymbol] = useState(symbol || '');
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('1Y');
+  const [displaySymbol, setDisplaySymbol] = useState(symbol);
 
   // Initialize chart when symbol is selected and container is ready
   useEffect(() => {
-    if (!symbol) {
+    if (!displaySymbol) {
       // Clean up existing chart when no symbol is selected
       if (chartRef.current) {
         chartRef.current.remove();
@@ -51,7 +66,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         return null;
       }
 
-      console.log('Initializing chart for symbol:', symbol, { 
+      console.log('Initializing chart for symbol:', displaySymbol, { 
         containerWidth: chartContainerRef.current.clientWidth,
         containerHeight: chartContainerRef.current.clientHeight 
       });
@@ -151,12 +166,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       // Define and call fetchData function
       const fetchData = async () => {
-        console.log(`Fetching price data for symbol: ${symbol}`);
+        console.log(`Fetching price data for symbol: ${displaySymbol}`);
         setLoading(true);
         setError(null);
 
+        const selectedPeriodData = TIME_PERIODS.find(p => p.value === selectedPeriod);
+        const days = selectedPeriodData?.days || 365;
+
         try {
-          const url = `http://127.0.0.1:8080/price-data/${symbol}?days=365`;
+          const url = `http://127.0.0.1:8080/price-data/${displaySymbol}?days=${days}`;
           console.log(`Making API call to: ${url}`);
           const response = await fetch(url);
           if (!response.ok) {
@@ -208,7 +226,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           // Fit content
           chart.timeScale().fitContent();
 
-          console.log(`Successfully loaded ${data.length} data points, ${ema21Data.length} EMA21 points, ${ema200Data.length} EMA200 points for ${symbol}`);
+          console.log(`Successfully loaded ${data.length} data points, ${ema21Data.length} EMA21 points, ${ema200Data.length} EMA200 points for ${displaySymbol}`);
 
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -241,15 +259,72 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ema200SeriesRef.current = null;
       }
     };
+  }, [displaySymbol, selectedPeriod]);
+
+  // Handle symbol input and search
+  const handleSymbolSearch = () => {
+    if (inputSymbol.trim()) {
+      setDisplaySymbol(inputSymbol.trim().toUpperCase());
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSymbolSearch();
+    }
+  };
+
+  // Update input symbol when prop symbol changes
+  useEffect(() => {
+    if (symbol) {
+      setInputSymbol(symbol);
+      setDisplaySymbol(symbol);
+    }
   }, [symbol]);
 
-
-  if (!symbol) {
+  if (!symbol && !displaySymbol) {
     return (
-      <div 
-        className="flex-1 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-400 w-full"
-      >
-        Select a symbol to view chart
+      <div className="flex-1 flex flex-col relative">
+        <div className="mb-4 flex-shrink-0 space-y-3">
+          {/* Input controls */}
+          <div className="flex gap-3 items-center">
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={inputSymbol}
+                onChange={(e) => setInputSymbol(e.target.value.toUpperCase())}
+                onKeyPress={handleKeyPress}
+                placeholder="Enter symbol (e.g., AAPL)"
+                className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                style={{ minWidth: '150px' }}
+              />
+              <button
+                onClick={handleSymbolSearch}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                Search
+              </button>
+            </div>
+            
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value as TimePeriod)}
+              className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {TIME_PERIODS.map((period) => (
+                <option key={period.value} value={period.value}>
+                  {period.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        
+        <div 
+          className="flex-1 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-400 w-full"
+        >
+          Enter a symbol and click Search to view chart
+        </div>
       </div>
     );
   }
@@ -268,9 +343,43 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         </div>
       )}
 
-      <div className="mb-2 flex-shrink-0">
+      <div className="mb-4 flex-shrink-0 space-y-3">
+        {/* Input controls */}
+        <div className="flex gap-3 items-center">
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={inputSymbol}
+              onChange={(e) => setInputSymbol(e.target.value.toUpperCase())}
+              onKeyPress={handleKeyPress}
+              placeholder="Enter symbol (e.g., AAPL)"
+              className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{ minWidth: '150px' }}
+            />
+            <button
+              onClick={handleSymbolSearch}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Search
+            </button>
+          </div>
+          
+          <select
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value as TimePeriod)}
+            className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            {TIME_PERIODS.map((period) => (
+              <option key={period.value} value={period.value}>
+                {period.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Symbol title */}
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
-          {symbol}
+          {displaySymbol || symbol}
         </h3>
       </div>
 
