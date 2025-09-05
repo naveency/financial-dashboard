@@ -14,12 +14,10 @@ interface CandlestickData {
 
 interface CandlestickChartProps {
   symbol: string | null;
-  height?: number;
 }
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   symbol,
-  height = 400,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -58,9 +56,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         return null;
       }
 
+      const containerHeight = chartContainerRef.current.clientHeight || 600; // fallback height
+      
       console.log('Creating chart with dimensions:', {
         width: chartContainerRef.current.clientWidth,
-        height
+        height: containerHeight
       });
     
       // Create chart
@@ -74,7 +74,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           horzLines: { color: '#374151' },
         },
         width: chartContainerRef.current.clientWidth,
-        height,
+        height: containerHeight,
         timeScale: {
           timeVisible: true,
           secondsVisible: false,
@@ -201,14 +201,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         volumeSeriesRef.current = null;
       }
     };
-  }, [symbol, height]);
+  }, [symbol]);
 
 
   if (!symbol) {
     return (
       <div 
-        className="flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-400 w-full"
-        style={{ height }}
+        className="flex-1 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-400 w-full"
       >
         Select a symbol to view chart
       </div>
@@ -216,7 +215,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   }
 
   return (
-    <div className="relative">
+    <div className="flex-1 flex flex-col relative">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 rounded-lg z-10">
           <div className="text-zinc-400">Loading chart...</div>
@@ -229,7 +228,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         </div>
       )}
 
-      <div className="mb-2">
+      <div className="mb-2 flex-shrink-0">
         <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
           {symbol}
         </h3>
@@ -237,8 +236,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       <div 
         ref={chartContainerRef} 
-        className="border border-zinc-200 dark:border-zinc-700 rounded-lg w-full"
-        style={{ height }}
+        className="flex-1 border border-zinc-200 dark:border-zinc-700 rounded-lg w-full"
       />
     </div>
   );
