@@ -280,7 +280,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           const visibleRange = timeScale.getVisibleRange();
           if (visibleRange) {
             const totalRange = visibleRange.to - visibleRange.from;
-            const bufferAmount = totalRange * 0.05; // 5% buffer
+            const bufferAmount = totalRange * 0.15; // 15% buffer for more noticeable spacing
             timeScale.setVisibleRange({
               from: visibleRange.from,
               to: visibleRange.to + bufferAmount
