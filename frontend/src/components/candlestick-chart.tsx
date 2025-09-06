@@ -102,6 +102,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         timeScale: {
           timeVisible: true,
           secondsVisible: false,
+          rightOffset: 5, // Add small buffer - 5 bars worth of space
         },
         rightPriceScale: {
           borderVisible: false,
@@ -272,20 +273,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             setSelectedOHLCV(data[data.length - 1]);
           }
 
-          // Fit content with some padding on the right
+          // Fit content - the rightOffset option should provide the buffer space
           chart.timeScale().fitContent();
-          
-          // Add buffer space at the end of the chart
-          const timeScale = chart.timeScale();
-          const visibleRange = timeScale.getVisibleRange();
-          if (visibleRange) {
-            const totalRange = visibleRange.to - visibleRange.from;
-            const bufferAmount = totalRange * 0.15; // 15% buffer for more noticeable spacing
-            timeScale.setVisibleRange({
-              from: visibleRange.from,
-              to: visibleRange.to + bufferAmount
-            });
-          }
+          console.log('Applied fitContent with rightOffset of 50 bars');
 
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch data');

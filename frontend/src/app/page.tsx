@@ -12,6 +12,7 @@ export default function Home() {
     symbol?: string; 
     ticker?: string; 
     name?: string;
+    type?: string;
     last_price?: number;
     price_change?: number;
     percent_change?: number;
@@ -24,11 +25,95 @@ export default function Home() {
   const [isResizing, setIsResizing] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [sortColumn, setSortColumn] = useState<'symbol' | 'price' | 'change' | 'percent' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  // Settings state
+  const [showETFs, setShowETFs] = useState(true);
+  const [showCommonStock, setShowCommonStock] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customSymbols, setCustomSymbols] = useState<string[]>([]);
+  const [useCustomSymbols, setUseCustomSymbols] = useState(false);
+  const [symbolInput, setSymbolInput] = useState('');
 
-  // Get watchlist components from API data
-  const watchlistComponents = watchlistData || [];
+  // Sort watchlist components
+  const handleSort = (column: 'symbol' | 'price' | 'change' | 'percent') => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
 
-  // Theme detection and initialization - client-only to avoid hydration issues
+  // Filter watchlist based on settings
+  const filteredWatchlistData = (watchlistData || []).filter(item => {
+    const itemData = typeof item === 'object' && item !== null ? item as any : {};
+    const itemSymbol = typeof item === 'string' 
+      ? item 
+      : itemData.symbol || itemData.ticker || itemData.name || '';
+    
+    // If custom symbols are enabled, filter by custom symbol list only
+    if (useCustomSymbols) {
+      return customSymbols.some(symbol => 
+        symbol.toUpperCase() === itemSymbol.toUpperCase()
+      );
+    }
+    
+    // Otherwise, apply ETF/Common Stock filters
+    const itemType = itemData.type || '';
+    
+    // If both filters are enabled, show all
+    if (showETFs && showCommonStock) return true;
+    
+    // If neither filter is enabled, show nothing
+    if (!showETFs && !showCommonStock) return false;
+    
+    // Check specific filters
+    if (showETFs && (itemType.toLowerCase() === 'etf' || itemType.toLowerCase().includes('etf'))) return true;
+    if (showCommonStock && (itemType.toLowerCase() === 'common stock' || itemType.toLowerCase() === 'stock' || itemType.toLowerCase() === 'common' || (!itemType || itemType === ''))) return true;
+    
+    return false;
+  });
+
+  const watchlistComponents = sortColumn ? filteredWatchlistData.slice().sort((a, b) => {
+    const aData = typeof a === 'object' && a !== null ? a as any : {};
+    const bData = typeof b === 'object' && b !== null ? b as any : {};
+    
+    let aValue: string | number;
+    let bValue: string | number;
+    
+    switch (sortColumn) {
+      case 'symbol':
+        aValue = (typeof a === 'string' ? a : aData.symbol || aData.ticker || aData.name || '').toLowerCase();
+        bValue = (typeof b === 'string' ? b : bData.symbol || bData.ticker || bData.name || '').toLowerCase();
+        break;
+      case 'price':
+        aValue = aData.last_price || 0;
+        bValue = bData.last_price || 0;
+        break;
+      case 'change':
+        aValue = aData.price_change || 0;
+        bValue = bData.price_change || 0;
+        break;
+      case 'percent':
+        aValue = aData.percent_change || 0;
+        bValue = bData.percent_change || 0;
+        break;
+      default:
+        return 0;
+    }
+    
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortDirection === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+    } else {
+      const numA = Number(aValue);
+      const numB = Number(bValue);
+      return sortDirection === 'asc' ? numA - numB : numB - numA;
+    }
+  }) : filteredWatchlistData; // Use original server order when no sorting is applied
+
+  // Theme detection and settings initialization - client-only to avoid hydration issues
   useEffect(() => {
     setMounted(true);
     
@@ -53,6 +138,32 @@ export default function Home() {
       }
       localStorage.setItem('theme', prefersDark ? 'dark' : 'light');
     }
+    
+    // Load filter settings from localStorage
+    const savedShowETFs = localStorage.getItem('showETFs');
+    const savedShowCommonStock = localStorage.getItem('showCommonStock');
+    const savedCustomSymbols = localStorage.getItem('customSymbols');
+    const savedUseCustomSymbols = localStorage.getItem('useCustomSymbols');
+    
+    if (savedShowETFs !== null) {
+      setShowETFs(savedShowETFs === 'true');
+    }
+    if (savedShowCommonStock !== null) {
+      setShowCommonStock(savedShowCommonStock === 'true');
+    }
+    if (savedCustomSymbols !== null) {
+      try {
+        const parsedSymbols = JSON.parse(savedCustomSymbols);
+        if (Array.isArray(parsedSymbols)) {
+          setCustomSymbols(parsedSymbols);
+        }
+      } catch (error) {
+        console.warn('Failed to parse saved custom symbols:', error);
+      }
+    }
+    if (savedUseCustomSymbols !== null) {
+      setUseCustomSymbols(savedUseCustomSymbols === 'true');
+    }
   }, []);
 
   // Apply theme changes to document
@@ -69,6 +180,86 @@ export default function Home() {
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
   };
+
+  // Settings handlers
+  const handleShowETFsChange = (checked: boolean) => {
+    setShowETFs(checked);
+    localStorage.setItem('showETFs', checked.toString());
+  };
+
+  const handleShowCommonStockChange = (checked: boolean) => {
+    setShowCommonStock(checked);
+    localStorage.setItem('showCommonStock', checked.toString());
+  };
+
+  const handleUseCustomSymbolsChange = (checked: boolean) => {
+    setUseCustomSymbols(checked);
+    localStorage.setItem('useCustomSymbols', checked.toString());
+  };
+
+  const addSymbol = () => {
+    const symbol = symbolInput.trim().toUpperCase();
+    if (symbol && !customSymbols.includes(symbol)) {
+      const newSymbols = [...customSymbols, symbol];
+      setCustomSymbols(newSymbols);
+      localStorage.setItem('customSymbols', JSON.stringify(newSymbols));
+      setSymbolInput('');
+    }
+  };
+
+  const removeSymbol = (symbolToRemove: string) => {
+    const newSymbols = customSymbols.filter(symbol => symbol !== symbolToRemove);
+    setCustomSymbols(newSymbols);
+    localStorage.setItem('customSymbols', JSON.stringify(newSymbols));
+  };
+
+  const clearAllSymbols = () => {
+    setCustomSymbols([]);
+    localStorage.setItem('customSymbols', JSON.stringify([]));
+  };
+
+  const addSymbolsFromInput = (input: string) => {
+    // Parse comma-separated symbols
+    const inputSymbols = input
+      .split(',')
+      .map(s => s.trim().toUpperCase())
+      .filter(s => s && !customSymbols.includes(s));
+    
+    if (inputSymbols.length > 0) {
+      const newSymbols = [...customSymbols, ...inputSymbols];
+      setCustomSymbols(newSymbols);
+      localStorage.setItem('customSymbols', JSON.stringify(newSymbols));
+    }
+    setSymbolInput('');
+  };
+
+  const handleSymbolInputKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      if (symbolInput.includes(',')) {
+        addSymbolsFromInput(symbolInput);
+      } else {
+        addSymbol();
+      }
+    }
+  };
+
+  // Close settings dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const settingsButton = target.closest('[data-settings-button]');
+      const settingsDropdown = target.closest('[data-settings-dropdown]');
+      
+      if (!settingsButton && !settingsDropdown && showSettings) {
+        setShowSettings(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSettings]);
 
   useEffect(() => {
     // On mount, fetch the max date from the API and set it as the date
@@ -90,6 +281,8 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setSelectedSymbol(null); // Clear selected symbol when watchlist changes
+    setSortColumn(null); // Clear sorting when watchlist changes to preserve server order
+    setSortDirection('asc');
     
     let url = '';
     const params = new URLSearchParams({ date });
@@ -159,20 +352,7 @@ export default function Home() {
         const dataArray = Array.isArray(data) ? data : [];
         setWatchlistData(dataArray);
         
-        // Auto-select first symbol when watchlist data is loaded
-        if (dataArray.length > 0) {
-          const firstItem = dataArray[0];
-          const firstSymbol = typeof firstItem === 'string'
-            ? firstItem
-            : (firstItem && typeof firstItem === 'object' && ('symbol' in firstItem || 'ticker' in firstItem || 'name' in firstItem))
-              ? (firstItem as { symbol?: string; ticker?: string; name?: string }).symbol || 
-                (firstItem as { symbol?: string; ticker?: string; name?: string }).ticker || 
-                (firstItem as { symbol?: string; ticker?: string; name?: string }).name
-              : null;
-          setSelectedSymbol(firstSymbol || null);
-        } else {
-          setSelectedSymbol(null);
-        }
+        // Note: Selected symbol will be set by separate useEffect based on filtered data
       })
       .catch(e => {
         setError(e.message);
@@ -181,6 +361,34 @@ export default function Home() {
       })
       .finally(() => setLoading(false));
   }, [selectedWatchlistId, date]);
+
+  // Auto-select first symbol from filtered watchlist when data or filters change
+  useEffect(() => {
+    // Only auto-select if no symbol is currently selected or if the current symbol is not in the filtered list
+    const currentSymbolInFilteredList = watchlistComponents.some(item => {
+      const itemSymbol = typeof item === 'string' 
+        ? item 
+        : item?.symbol || item?.ticker || item?.name || '';
+      return itemSymbol === selectedSymbol;
+    });
+
+    // If current symbol is not in filtered list or no symbol is selected, select first from filtered list
+    if (!selectedSymbol || !currentSymbolInFilteredList) {
+      if (watchlistComponents.length > 0) {
+        const firstItem = watchlistComponents[0];
+        const firstSymbol = typeof firstItem === 'string'
+          ? firstItem
+          : (firstItem && typeof firstItem === 'object' && ('symbol' in firstItem || 'ticker' in firstItem || 'name' in firstItem))
+            ? (firstItem as { symbol?: string; ticker?: string; name?: string }).symbol || 
+              (firstItem as { symbol?: string; ticker?: string; name?: string }).ticker || 
+              (firstItem as { symbol?: string; ticker?: string; name?: string }).name
+            : null;
+        setSelectedSymbol(firstSymbol || null);
+      } else {
+        setSelectedSymbol(null);
+      }
+    }
+  }, [watchlistComponents, selectedSymbol]);
 
   // Prevent hydration issues by not rendering theme-dependent content until mounted
   if (!mounted) {
@@ -303,21 +511,194 @@ export default function Home() {
               document.addEventListener('mouseup', handleMouseUp);
             }}
           />
-          <h2 className="text-lg font-semibold mb-2">{selectedWatchlist?.name} Components</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold">{selectedWatchlist?.name} Components</h2>
+            <div className="relative">
+              <button
+                data-settings-button
+                onClick={() => setShowSettings(!showSettings)}
+                className="p-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                title="Filter Settings"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                </svg>
+              </button>
+              
+              {showSettings && (
+                <div data-settings-dropdown className="absolute right-0 top-full mt-1 w-80 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg z-10 max-h-96 overflow-y-auto">
+                  <div className="p-4">
+                    <h3 className="text-sm font-semibold mb-3 text-zinc-900 dark:text-white">Filter Settings</h3>
+                    
+                    {/* Custom Symbols Section */}
+                    <div className="mb-4 pb-3 border-b border-zinc-200 dark:border-zinc-700">
+                      <label className="flex items-center mb-3">
+                        <input
+                          type="checkbox"
+                          checked={useCustomSymbols}
+                          onChange={(e) => handleUseCustomSymbolsChange(e.target.checked)}
+                          className="mr-2 rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Use Custom Symbol List</span>
+                      </label>
+                      
+                      {useCustomSymbols && (
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={symbolInput}
+                              onChange={(e) => setSymbolInput(e.target.value)}
+                              onKeyPress={handleSymbolInputKeyPress}
+                              placeholder="Enter symbols (e.g., AAPL, MSFT)"
+                              className="flex-1 px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            <button
+                              onClick={() => {
+                                if (symbolInput.includes(',')) {
+                                  addSymbolsFromInput(symbolInput);
+                                } else {
+                                  addSymbol();
+                                }
+                              }}
+                              className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                            >
+                              Add
+                            </button>
+                          </div>
+                          
+                          {customSymbols.length > 0 && (
+                            <div className="max-h-20 overflow-y-auto">
+                              <div className="flex flex-wrap gap-1">
+                                {customSymbols.map((symbol) => (
+                                  <span
+                                    key={symbol}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded"
+                                  >
+                                    {symbol}
+                                    <button
+                                      onClick={() => removeSymbol(symbol)}
+                                      className="text-blue-500 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-100"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {customSymbols.length === 0 
+                                ? "Add symbols to create a custom filter list"
+                                : `${customSymbols.length} symbol${customSymbols.length !== 1 ? 's' : ''} in your list`
+                              }
+                            </div>
+                            {customSymbols.length > 0 && (
+                              <button
+                                onClick={clearAllSymbols}
+                                className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                              >
+                                Clear All
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Type Filters Section - Only show when not using custom symbols */}
+                    {!useCustomSymbols && (
+                      <div className="space-y-3 mb-4">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={showETFs}
+                            onChange={(e) => handleShowETFsChange(e.target.checked)}
+                            className="mr-2 rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300">Show ETFs</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={showCommonStock}
+                            onChange={(e) => handleShowCommonStockChange(e.target.checked)}
+                            className="mr-2 rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300">Show Common Stock</span>
+                        </label>
+                      </div>
+                    )}
+                    
+                    <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700">
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {useCustomSymbols 
+                          ? `Showing ${watchlistComponents.length} of ${customSymbols.length} custom symbols`
+                          : `Showing ${watchlistComponents.length} of ${(watchlistData || []).length} securities`
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           {loading && <div>Loading...</div>}
           {error && <div className="text-red-500">{error}</div>}
           
-          {/* Column Headers - Using CSS Grid with fr units for flexible columns */}
+          {/* Column Headers - Clickable for sorting */}
           <div 
             className="grid gap-1 px-3 py-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-700"
             style={{
               gridTemplateColumns: 'minmax(60px, auto) minmax(60px, auto) minmax(50px, auto) minmax(40px, auto)'
             }}
           >
-            <div className="text-left">Symbol</div>
-            <div className="text-left">Price</div>
-            <div className="text-left">Change</div>
-            <div className="text-left">%</div>
+            <button 
+              className="text-left hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
+              onClick={() => handleSort('symbol')}
+            >
+              Symbol
+              {sortColumn === 'symbol' && (
+                <span className="text-blue-500">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </button>
+            <button 
+              className="text-left hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
+              onClick={() => handleSort('price')}
+            >
+              Price
+              {sortColumn === 'price' && (
+                <span className="text-blue-500">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </button>
+            <button 
+              className="text-left hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
+              onClick={() => handleSort('change')}
+            >
+              Change
+              {sortColumn === 'change' && (
+                <span className="text-blue-500">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </button>
+            <button 
+              className="text-left hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
+              onClick={() => handleSort('percent')}
+            >
+              %
+              {sortColumn === 'percent' && (
+                <span className="text-blue-500">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </button>
           </div>
           
           <ul className="flex flex-col gap-1">
