@@ -188,7 +188,73 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-screen bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+    <div className="min-h-screen bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+      {/* Mobile Layout */}
+      <div className="lg:hidden flex flex-col min-h-screen">
+        <div className="border-b border-zinc-200 dark:border-zinc-800">
+          <SidebarWithDateAndWatchlists
+            selectedWatchlistId={selectedWatchlistId}
+            onSelectWatchlist={setSelectedWatchlistId}
+            date={date}
+            setDate={setDate}
+            isDarkMode={isDarkMode}
+            toggleTheme={toggleTheme}
+          />
+        </div>
+        
+        {/* Chart Section - Mobile */}
+        <main className="flex-1 p-2 sm:p-4 bg-white dark:bg-zinc-900">
+          <CandlestickChart 
+            symbol={selectedSymbol} 
+            isDarkMode={isDarkMode}
+          />
+        </main>
+
+        {/* Watchlist Section - Mobile */}
+        <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 max-h-64 overflow-y-auto">
+          <h3 className="font-semibold mb-3 text-sm uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Watchlist
+          </h3>
+          
+          {/* Mobile Watchlist Grid */}
+          <div className="grid grid-cols-1 gap-2">
+            {watchlistComponents.map((item, index) => {
+              const symbol = typeof item === 'string' 
+                ? item 
+                : item?.symbol || item?.ticker || item?.name || `Item ${index + 1}`;
+              const displaySymbol = typeof symbol === 'string' ? symbol : String(symbol);
+              const price = typeof item === 'object' && item ? item.last_price : null;
+              const change = typeof item === 'object' && item ? item.price_change : null;
+              const percentChange = typeof item === 'object' && item ? item.percent_change : null;
+
+              return (
+                <div
+                  key={index}
+                  onClick={() => setSelectedSymbol(displaySymbol)}
+                  className={`flex justify-between items-center p-3 rounded cursor-pointer transition-colors ${
+                    selectedSymbol === displaySymbol
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div>
+                    <div className="font-medium text-sm">{displaySymbol}</div>
+                    {price && <div className="text-xs text-zinc-500 dark:text-zinc-400">${price.toFixed(2)}</div>}
+                  </div>
+                  {change !== null && percentChange !== null && (
+                    <div className={`text-xs font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {change >= 0 ? '+' : ''}${change.toFixed(2)} ({change >= 0 ? '+' : ''}{percentChange.toFixed(2)}%)
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Layout */}
+      <div className="hidden lg:flex min-h-screen">
         <aside className="w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <SidebarWithDateAndWatchlists
             selectedWatchlistId={selectedWatchlistId}
@@ -306,7 +372,8 @@ export default function Home() {
             })}
           </ul>
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

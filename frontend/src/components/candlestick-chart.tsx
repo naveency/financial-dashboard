@@ -474,20 +474,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       <div className="flex-1 flex flex-col relative">
         <div className="mb-4 flex-shrink-0 space-y-3">
           {/* Input controls */}
-          <div className="flex gap-3 items-center">
-            <div className="flex gap-2 items-center">
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="flex gap-2 items-center flex-1 sm:flex-none">
               <input
                 type="text"
                 value={inputSymbol}
                 onChange={(e) => setInputSymbol(e.target.value.toUpperCase())}
                 onKeyPress={handleKeyPress}
                 placeholder="Enter symbol (e.g., AAPL)"
-                className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                style={{ minWidth: '150px' }}
+                className="flex-1 sm:flex-none px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-0 sm:min-w-[150px]"
               />
               <button
                 onClick={handleSymbolSearch}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 whitespace-nowrap"
               >
                 Search
               </button>
@@ -532,20 +531,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       <div className="mb-4 flex-shrink-0 space-y-3">
         {/* Input controls */}
-        <div className="flex gap-3 items-center">
-          <div className="flex gap-2 items-center">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <div className="flex gap-2 items-center flex-1 sm:flex-none">
             <input
               type="text"
               value={inputSymbol}
               onChange={(e) => setInputSymbol(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
               placeholder="Enter symbol (e.g., AAPL)"
-              className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              style={{ minWidth: '150px' }}
+              className="flex-1 sm:flex-none px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-0 sm:min-w-[150px]"
             />
             <button
               onClick={handleSymbolSearch}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 whitespace-nowrap"
             >
               Search
             </button>
@@ -565,12 +563,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         </div>
 
         {/* Symbol title and OHLCV data */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div className="flex flex-col">
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
               {displaySymbol || symbol}
             </h3>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
               {isRealtimeEnabled && (
                 <span className="text-sm text-zinc-500 dark:text-zinc-400">
                   {marketStatus}
@@ -593,37 +591,42 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           </div>
           
           {selectedOHLCV && (
-            <div className="flex gap-4 text-sm">
+            <div className="flex flex-wrap gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm">
+              {/* Always show on all screen sizes */}
               <div className="flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Date</span>
-                <span className="font-medium text-zinc-900 dark:text-white">
+                <span className="font-medium text-zinc-900 dark:text-white whitespace-nowrap">
                   {(() => {
                     const [year, month, day] = selectedOHLCV.time.split('-');
                     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day)).toLocaleDateString();
                   })()}
                 </span>
               </div>
-              <div className="flex flex-col">
+              
+              {/* Hide Open/High/Low on mobile, show on sm+ */}
+              <div className="hidden sm:flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">O</span>
-                <span className="font-medium text-zinc-900 dark:text-white">
+                <span className="font-medium text-zinc-900 dark:text-white whitespace-nowrap">
                   ${selectedOHLCV.open.toFixed(2)}
                 </span>
               </div>
-              <div className="flex flex-col">
+              <div className="hidden sm:flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">H</span>
-                <span className="font-medium text-zinc-900 dark:text-white">
+                <span className="font-medium text-zinc-900 dark:text-white whitespace-nowrap">
                   ${selectedOHLCV.high.toFixed(2)}
                 </span>
               </div>
-              <div className="flex flex-col">
+              <div className="hidden sm:flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">L</span>
-                <span className="font-medium text-zinc-900 dark:text-white">
+                <span className="font-medium text-zinc-900 dark:text-white whitespace-nowrap">
                   ${selectedOHLCV.low.toFixed(2)}
                 </span>
               </div>
+              
+              {/* Always show Close */}
               <div className="flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">C</span>
-                <span className="font-medium text-zinc-900 dark:text-white">
+                <span className="font-medium text-zinc-900 dark:text-white whitespace-nowrap">
                   ${selectedOHLCV.close.toFixed(2)}
                 </span>
               </div>
@@ -639,15 +642,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   
                   return (
                     <>
+                      {/* Always show Change */}
                       <div className="flex flex-col">
                         <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Change</span>
-                        <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                        <span className={`font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
                           {isPositive ? '+' : ''}${change.toFixed(2)}
                         </span>
                       </div>
+                      {/* Always show % Change */}
                       <div className="flex flex-col">
                         <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">% Change</span>
-                        <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                        <span className={`font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
                           {isPositive ? '+' : ''}{percentChange.toFixed(2)}%
                         </span>
                       </div>
@@ -656,24 +661,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 }
                 return null;
               })()}
-              <div className="flex flex-col">
+              
+              {/* Hide Volume on mobile, show on md+ */}
+              <div className="hidden md:flex flex-col">
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">Vol</span>
-                <span className="font-medium text-zinc-900 dark:text-white">
+                <span className="font-medium text-zinc-900 dark:text-white whitespace-nowrap">
                   {selectedOHLCV.volume.toLocaleString()}
                 </span>
               </div>
+              
+              {/* Hide EMA on mobile, show on lg+ */}
               {selectedOHLCV.ema_21 && (
-                <div className="flex flex-col">
+                <div className="hidden lg:flex flex-col">
                   <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">EMA21</span>
-                  <span className="font-medium" style={{ color: '#ff6b35' }}>
+                  <span className="font-medium whitespace-nowrap" style={{ color: '#ff6b35' }}>
                     ${selectedOHLCV.ema_21.toFixed(2)}
                   </span>
                 </div>
               )}
               {selectedOHLCV.ema_200 && (
-                <div className="flex flex-col">
+                <div className="hidden lg:flex flex-col">
                   <span className="text-xs text-zinc-500 dark:text-zinc-400 uppercase">EMA200</span>
-                  <span className="font-medium" style={{ color: '#1e40af' }}>
+                  <span className="font-medium whitespace-nowrap" style={{ color: '#1e40af' }}>
                     ${selectedOHLCV.ema_200.toFixed(2)}
                   </span>
                 </div>
