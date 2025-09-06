@@ -272,8 +272,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             setSelectedOHLCV(data[data.length - 1]);
           }
 
-          // Fit content
+          // Fit content with some padding on the right
           chart.timeScale().fitContent();
+          
+          // Add buffer space at the end of the chart
+          const timeScale = chart.timeScale();
+          const visibleRange = timeScale.getVisibleRange();
+          if (visibleRange) {
+            const totalRange = visibleRange.to - visibleRange.from;
+            const bufferAmount = totalRange * 0.05; // 5% buffer
+            timeScale.setVisibleRange({
+              from: visibleRange.from,
+              to: visibleRange.to + bufferAmount
+            });
+          }
 
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch data');
