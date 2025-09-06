@@ -5,6 +5,8 @@ import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-chart
 import { API_ENDPOINTS } from '../lib/api-config';
 import { getRealtimeService, RealtimePrice } from '../lib/realtime-data';
 import { shouldEnableRealtimeData, getMarketStatusDisplay, shouldEnableRealtimeDataSync, getMarketStatusDisplaySync } from '../lib/market-hours';
+import { Input } from './catalyst/input';
+import { Button } from './catalyst/button';
 
 interface CandlestickData {
   time: string;
@@ -20,6 +22,8 @@ interface CandlestickData {
 interface CandlestickChartProps {
   symbol: string | null;
   isDarkMode?: boolean;
+  userApiKey?: string;
+  isRealTimeEnabled?: boolean;
 }
 
 type TimePeriod = '3M' | '6M' | '1Y' | '2Y' | '5Y';
@@ -35,11 +39,33 @@ const TIME_PERIODS: { label: string; value: TimePeriod; days: number }[] = [
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   symbol,
   isDarkMode = false,
+  userApiKey = '',
+  isRealTimeEnabled = false,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  
+  // Helper function to build API URLs with user API key when real-time is enabled
+  const buildApiUrl = (baseUrl: string, additionalParams?: Record<string, string>) => {
+    const url = new URL(baseUrl);
+    
+    // Add user API key if real-time is enabled and key is available
+    if (isRealTimeEnabled && userApiKey) {
+      url.searchParams.set('api_key', userApiKey);
+      url.searchParams.set('realtime', 'true');
+    }
+    
+    // Add any additional parameters
+    if (additionalParams) {
+      Object.entries(additionalParams).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
+    }
+    
+    return url.toString();
+  };
   const ema21SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const ema200SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -178,7 +204,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         const days = selectedPeriodData?.days || 365;
 
         try {
-          const url = `${API_ENDPOINTS.priceData}/${displaySymbol}?days=${days}`;
+          const url = buildApiUrl(`${API_ENDPOINTS.priceData}/${displaySymbol}`, { days: days.toString() });
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -308,7 +334,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ema200SeriesRef.current = null;
       }
     };
-  }, [displaySymbol, selectedPeriod, isDarkMode]);
+  }, [displaySymbol, selectedPeriod, isDarkMode, userApiKey, isRealTimeEnabled]);
 
   // Handle symbol input and search
   const handleSymbolSearch = () => {
@@ -533,35 +559,45 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       <div className="mb-4 flex-shrink-0 space-y-3">
         {/* Input controls */}
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          <div className="flex gap-2 items-center flex-1 sm:flex-none">
-            <input
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          {/* Search and period controls grouped together */}
+          <div className="flex gap-2 items-center flex-1 min-w-0">
+            <Input
               type="text"
               value={inputSymbol}
               onChange={(e) => setInputSymbol(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
               placeholder="Enter symbol (e.g., AAPL)"
-              className="flex-1 sm:flex-none px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-0 sm:min-w-[150px]"
+              className="flex-1 min-w-0 max-w-[200px]"
             />
-            <button
+            <Button
               onClick={handleSymbolSearch}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 whitespace-nowrap"
+              className="whitespace-nowrap flex-shrink-0"
             >
               Search
-            </button>
+            </Button>
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value as TimePeriod)}
+              className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-shrink-0"
+            >
+              {TIME_PERIODS.map((period) => (
+                <option key={period.value} value={period.value}>
+                  {period.label}
+                </option>
+              ))}
+            </select>
           </div>
           
-          <select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value as TimePeriod)}
-            className="px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            {TIME_PERIODS.map((period) => (
-              <option key={period.value} value={period.value}>
-                {period.label}
-              </option>
-            ))}
-          </select>
+          {/* Data mode indicator - separate on the right */}
+          {isRealTimeEnabled && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex-shrink-0">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                Live
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Symbol title and OHLCV data */}

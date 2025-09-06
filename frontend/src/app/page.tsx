@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { SidebarWithDateAndWatchlists, mockWatchlists } from "../components/sidebar-with-date-watchlists";
 import { CandlestickChart } from "../components/candlestick-chart";
 import { API_ENDPOINTS } from "../lib/api-config";
+import { Input } from "../components/catalyst/input";
+import { Button } from "../components/catalyst/button";
+import { Checkbox, CheckboxField } from "../components/catalyst/checkbox";
+import { Dialog, DialogActions, DialogBody, DialogDescription, DialogTitle } from "../components/catalyst/dialog";
 
 export default function Home() {
   const [selectedWatchlistId, setSelectedWatchlistId] = useState(mockWatchlists[0].id);
@@ -35,6 +39,11 @@ export default function Home() {
   const [customSymbols, setCustomSymbols] = useState<string[]>([]);
   const [useCustomSymbols, setUseCustomSymbols] = useState(false);
   const [symbolInput, setSymbolInput] = useState('');
+  
+  // API key state
+  const [userApiKey, setUserApiKey] = useState('');
+  const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
 
   // Sort watchlist components
   const handleSort = (column: 'symbol' | 'price' | 'change' | 'percent') => {
@@ -144,6 +153,8 @@ export default function Home() {
     const savedShowCommonStock = localStorage.getItem('showCommonStock');
     const savedCustomSymbols = localStorage.getItem('customSymbols');
     const savedUseCustomSymbols = localStorage.getItem('useCustomSymbols');
+    const savedUserApiKey = localStorage.getItem('userApiKey');
+    const savedIsRealTimeEnabled = localStorage.getItem('isRealTimeEnabled');
     
     if (savedShowETFs !== null) {
       setShowETFs(savedShowETFs === 'true');
@@ -163,6 +174,13 @@ export default function Home() {
     }
     if (savedUseCustomSymbols !== null) {
       setUseCustomSymbols(savedUseCustomSymbols === 'true');
+    }
+    if (savedUserApiKey !== null) {
+      setUserApiKey(savedUserApiKey);
+      setApiKeyInput(savedUserApiKey);
+    }
+    if (savedIsRealTimeEnabled !== null) {
+      setIsRealTimeEnabled(savedIsRealTimeEnabled === 'true');
     }
   }, []);
 
@@ -218,6 +236,51 @@ export default function Home() {
     localStorage.setItem('customSymbols', JSON.stringify([]));
   };
 
+  // API key handlers
+  const saveApiKey = () => {
+    const trimmedKey = apiKeyInput.trim();
+    setUserApiKey(trimmedKey);
+    localStorage.setItem('userApiKey', trimmedKey);
+    
+    // Enable real-time if API key is provided
+    const hasApiKey = trimmedKey.length > 0;
+    setIsRealTimeEnabled(hasApiKey);
+    localStorage.setItem('isRealTimeEnabled', hasApiKey.toString());
+  };
+
+  const clearApiKey = () => {
+    setUserApiKey('');
+    setApiKeyInput('');
+    setIsRealTimeEnabled(false);
+    localStorage.removeItem('userApiKey');
+    localStorage.setItem('isRealTimeEnabled', 'false');
+  };
+
+  const toggleRealTime = (enabled: boolean) => {
+    setIsRealTimeEnabled(enabled);
+    localStorage.setItem('isRealTimeEnabled', enabled.toString());
+  };
+
+  // Helper function to build API URLs with user API key when real-time is enabled
+  const buildApiUrl = (baseUrl: string, additionalParams?: Record<string, string>) => {
+    const url = new URL(baseUrl);
+    
+    // Add user API key if real-time is enabled and key is available
+    if (isRealTimeEnabled && userApiKey) {
+      url.searchParams.set('api_key', userApiKey);
+      url.searchParams.set('realtime', 'true');
+    }
+    
+    // Add any additional parameters
+    if (additionalParams) {
+      Object.entries(additionalParams).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
+    }
+    
+    return url.toString();
+  };
+
   const addSymbolsFromInput = (input: string) => {
     // Parse comma-separated symbols
     const inputSymbols = input
@@ -263,7 +326,7 @@ export default function Home() {
 
   useEffect(() => {
     // On mount, fetch the max date from the API and set it as the date
-    fetch(API_ENDPOINTS.maxdate)
+    fetch(buildApiUrl(API_ENDPOINTS.maxdate))
       .then(res => res.json())
       .then(data => {
         if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) {
@@ -273,7 +336,7 @@ export default function Home() {
         }
       })
       .catch(e => console.error('Failed to fetch max date:', e));
-  }, []);
+  }, [isRealTimeEnabled, userApiKey]);
 
   useEffect(() => {
     if (!date || !selectedWatchlistId) return;
@@ -284,58 +347,58 @@ export default function Home() {
     setSortColumn(null); // Clear sorting when watchlist changes to preserve server order
     setSortDirection('asc');
     
-    let url = '';
-    const params = new URLSearchParams({ date });
+    let baseUrl = '';
+    const additionalParams: Record<string, string> = { date };
     
     switch (selectedWatchlistId) {
       case 'new-highs-63':
-        url = API_ENDPOINTS.newHighs;
-        params.append('period', '63');
+        baseUrl = API_ENDPOINTS.newHighs;
+        additionalParams.period = '63';
         break;
       case 'new-highs-252':
-        url = API_ENDPOINTS.newHighs;
-        params.append('period', '252');
+        baseUrl = API_ENDPOINTS.newHighs;
+        additionalParams.period = '252';
         break;
       case 'new-lows-63':
-        url = API_ENDPOINTS.newLows;
-        params.append('period', '63');
+        baseUrl = API_ENDPOINTS.newLows;
+        additionalParams.period = '63';
         break;
       case 'new-lows-252':
-        url = API_ENDPOINTS.newLows;
-        params.append('period', '252');
+        baseUrl = API_ENDPOINTS.newLows;
+        additionalParams.period = '252';
         break;
       case 'gapup':
-        url = API_ENDPOINTS.gapup;
+        baseUrl = API_ENDPOINTS.gapup;
         break;
       case 'gapdown':
-        url = API_ENDPOINTS.gapdown;
+        baseUrl = API_ENDPOINTS.gapdown;
         break;
       case 'swing-high-cross-up':
-        url = API_ENDPOINTS.swingHighCross;
-        params.append('direction', 'up');
+        baseUrl = API_ENDPOINTS.swingHighCross;
+        additionalParams.direction = 'up';
         break;
       case 'swing-high-cross-down':
-        url = API_ENDPOINTS.swingHighCross;
-        params.append('direction', 'down');
+        baseUrl = API_ENDPOINTS.swingHighCross;
+        additionalParams.direction = 'down';
         break;
       case 'swing-low-cross-up':
-        url = API_ENDPOINTS.swingLowCross;
-        params.append('direction', 'up');
+        baseUrl = API_ENDPOINTS.swingLowCross;
+        additionalParams.direction = 'up';
         break;
       case 'swing-low-cross-down':
-        url = API_ENDPOINTS.swingLowCross;
-        params.append('direction', 'down');
+        baseUrl = API_ENDPOINTS.swingLowCross;
+        additionalParams.direction = 'down';
         break;
       case 'new-buys':
-        url = API_ENDPOINTS.newSignals;
-        params.append('signal', 'buy');
+        baseUrl = API_ENDPOINTS.newSignals;
+        additionalParams.signal = 'buy';
         break;
       case 'new-sells':
-        url = API_ENDPOINTS.newSignals;
-        params.append('signal', 'sell');
+        baseUrl = API_ENDPOINTS.newSignals;
+        additionalParams.signal = 'sell';
         break;
       case '52-week-rs':
-        url = API_ENDPOINTS.weekRelativeStrength;
+        baseUrl = API_ENDPOINTS.weekRelativeStrength;
         break;
       default:
         setWatchlistData([]);
@@ -343,7 +406,7 @@ export default function Home() {
         return;
     }
 
-    fetch(`${url}?${params.toString()}`)
+    fetch(buildApiUrl(baseUrl, additionalParams))
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         return res.json();
@@ -360,7 +423,7 @@ export default function Home() {
         setSelectedSymbol(null);
       })
       .finally(() => setLoading(false));
-  }, [selectedWatchlistId, date]);
+  }, [selectedWatchlistId, date, isRealTimeEnabled, userApiKey]);
 
   // Auto-select first symbol from filtered watchlist when data or filters change
   useEffect(() => {
@@ -415,6 +478,8 @@ export default function Home() {
           <CandlestickChart 
             symbol={selectedSymbol} 
             isDarkMode={isDarkMode}
+            userApiKey={userApiKey}
+            isRealTimeEnabled={isRealTimeEnabled}
           />
         </main>
 
@@ -480,6 +545,8 @@ export default function Home() {
               <CandlestickChart 
                 symbol={selectedSymbol}
                 isDarkMode={isDarkMode}
+                userApiKey={userApiKey}
+                isRealTimeEnabled={isRealTimeEnabled}
               />
             </div>
           </div>
@@ -512,138 +579,28 @@ export default function Home() {
             }}
           />
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold">{selectedWatchlist?.name} Components</h2>
-            <div className="relative">
-              <button
-                data-settings-button
-                onClick={() => setShowSettings(!showSettings)}
-                className="p-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                title="Filter Settings"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-                </svg>
-              </button>
-              
-              {showSettings && (
-                <div data-settings-dropdown className="absolute right-0 top-full mt-1 w-80 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg z-10 max-h-96 overflow-y-auto">
-                  <div className="p-4">
-                    <h3 className="text-sm font-semibold mb-3 text-zinc-900 dark:text-white">Filter Settings</h3>
-                    
-                    {/* Custom Symbols Section */}
-                    <div className="mb-4 pb-3 border-b border-zinc-200 dark:border-zinc-700">
-                      <label className="flex items-center mb-3">
-                        <input
-                          type="checkbox"
-                          checked={useCustomSymbols}
-                          onChange={(e) => handleUseCustomSymbolsChange(e.target.checked)}
-                          className="mr-2 rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Use Custom Symbol List</span>
-                      </label>
-                      
-                      {useCustomSymbols && (
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={symbolInput}
-                              onChange={(e) => setSymbolInput(e.target.value)}
-                              onKeyPress={handleSymbolInputKeyPress}
-                              placeholder="Enter symbols (e.g., AAPL, MSFT)"
-                              className="flex-1 px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                            <button
-                              onClick={() => {
-                                if (symbolInput.includes(',')) {
-                                  addSymbolsFromInput(symbolInput);
-                                } else {
-                                  addSymbol();
-                                }
-                              }}
-                              className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
-                            >
-                              Add
-                            </button>
-                          </div>
-                          
-                          {customSymbols.length > 0 && (
-                            <div className="max-h-20 overflow-y-auto">
-                              <div className="flex flex-wrap gap-1">
-                                {customSymbols.map((symbol) => (
-                                  <span
-                                    key={symbol}
-                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded"
-                                  >
-                                    {symbol}
-                                    <button
-                                      onClick={() => removeSymbol(symbol)}
-                                      className="text-blue-500 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-100"
-                                    >
-                                      ×
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                              {customSymbols.length === 0 
-                                ? "Add symbols to create a custom filter list"
-                                : `${customSymbols.length} symbol${customSymbols.length !== 1 ? 's' : ''} in your list`
-                              }
-                            </div>
-                            {customSymbols.length > 0 && (
-                              <button
-                                onClick={clearAllSymbols}
-                                className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                              >
-                                Clear All
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Type Filters Section - Only show when not using custom symbols */}
-                    {!useCustomSymbols && (
-                      <div className="space-y-3 mb-4">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={showETFs}
-                            onChange={(e) => handleShowETFsChange(e.target.checked)}
-                            className="mr-2 rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">Show ETFs</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={showCommonStock}
-                            onChange={(e) => handleShowCommonStockChange(e.target.checked)}
-                            className="mr-2 rounded border-zinc-300 dark:border-zinc-600 text-blue-500 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">Show Common Stock</span>
-                        </label>
-                      </div>
-                    )}
-                    
-                    <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700">
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {useCustomSymbols 
-                          ? `Showing ${watchlistComponents.length} of ${customSymbols.length} custom symbols`
-                          : `Showing ${watchlistComponents.length} of ${(watchlistData || []).length} securities`
-                        }
-                      </div>
-                    </div>
-                  </div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">{selectedWatchlist?.name} Components</h2>
+              {/* Data mode indicator */}
+              {isRealTimeEnabled && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                    Live
+                  </span>
                 </div>
               )}
             </div>
+            <Button
+              plain
+              onClick={() => setShowSettings(true)}
+              className="p-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              title="Settings"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+              </svg>
+            </Button>
           </div>
           {loading && <div>Loading...</div>}
           {error && <div className="text-red-500">{error}</div>}
@@ -754,6 +711,218 @@ export default function Home() {
           </ul>
         </div>
         </main>
+        
+        {/* Settings Dialog - Positioned at top level */}
+        <Dialog 
+          open={showSettings} 
+          onClose={() => setShowSettings(false)}
+          size="xl"
+        >
+      <DialogTitle>Settings</DialogTitle>
+      <DialogDescription>
+        Configure your real-time data and filtering options
+      </DialogDescription>
+      <DialogBody className="space-y-6">
+        <div 
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+          onMouseDown={(e) => { e.stopPropagation(); }}
+          onPointerDown={(e) => { e.stopPropagation(); }}
+        >
+        {/* API Key Section */}
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-base font-semibold text-zinc-900 dark:text-white mb-3">Real-time Data</h4>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  placeholder="Enter your EODHD API key"
+                  className="flex-1 text-xs"
+                />
+                <Button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveApiKey();
+                  }}
+                  disabled={!apiKeyInput.trim()}
+                  className="px-2 py-1 text-xs"
+                >
+                  Save
+                </Button>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {isRealTimeEnabled && <div className="w-2 h-2 rounded-full bg-green-500"></div>}
+                  <span className="text-xs text-zinc-600 dark:text-zinc-300">
+                    {isRealTimeEnabled ? 'Real-time enabled' : 'Real-time disabled'}
+                  </span>
+                </div>
+                {userApiKey && (
+                  <div className="flex items-center gap-2">
+                    <CheckboxField>
+                      <Checkbox
+                        checked={isRealTimeEnabled}
+                        onChange={toggleRealTime}
+                      />
+                      <span className="text-xs text-zinc-600 dark:text-zinc-300">Enable</span>
+                    </CheckboxField>
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearApiKey();
+                      }}
+                      className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                      plain
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
+              {userApiKey && (
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  API Key: ••••••••{userApiKey.slice(-4)}
+                </div>
+              )}
+              
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1">
+                <div>Enter your <a href="https://eodhd.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 underline">EODHD</a> API key to enable real-time data updates</div>
+                <div className="text-zinc-400 dark:text-zinc-500">🔒 Your API key is stored locally and never sent to our servers</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Settings Section */}
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-base font-semibold text-zinc-900 dark:text-white mb-3">Filter Options</h4>
+            
+            {/* Custom Symbols Section */}
+            <CheckboxField className="mb-3">
+              <Checkbox
+                checked={useCustomSymbols}
+                onChange={handleUseCustomSymbolsChange}
+              />
+              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Use Custom Symbol List</span>
+            </CheckboxField>
+            
+            {useCustomSymbols && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={symbolInput}
+                    onChange={(e) => setSymbolInput(e.target.value)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onKeyPress={handleSymbolInputKeyPress}
+                    placeholder="Enter symbols (e.g., AAPL, MSFT)"
+                    className="flex-1 text-xs"
+                  />
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (symbolInput.includes(',')) {
+                        addSymbolsFromInput(symbolInput);
+                      } else {
+                        addSymbol();
+                      }
+                    }}
+                    className="px-2 py-1 text-xs"
+                  >
+                    Add
+                  </Button>
+                </div>
+                
+                {customSymbols.length > 0 && (
+                  <div className="max-h-20 overflow-y-auto">
+                    <div className="flex flex-wrap gap-1">
+                      {customSymbols.map((symbol) => (
+                        <span
+                          key={symbol}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded"
+                        >
+                          {symbol}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSymbol(symbol);
+                            }}
+                            className="text-blue-500 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-100"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {customSymbols.length === 0 
+                      ? "Add symbols to create a custom filter list"
+                      : `${customSymbols.length} symbol${customSymbols.length !== 1 ? 's' : ''} in your list`
+                    }
+                  </div>
+                  {customSymbols.length > 0 && (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearAllSymbols();
+                      }}
+                      className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                      plain
+                    >
+                      Clear All
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Type Filters Section - Only show when not using custom symbols */}
+          {!useCustomSymbols && (
+            <div className="space-y-3 mb-4">
+              <CheckboxField>
+                <Checkbox
+                  checked={showETFs}
+                  onChange={handleShowETFsChange}
+                />
+                <span className="text-sm text-zinc-700 dark:text-zinc-300">Show ETFs</span>
+              </CheckboxField>
+              <CheckboxField>
+                <Checkbox
+                  checked={showCommonStock}
+                  onChange={handleShowCommonStockChange}
+                />
+                <span className="text-sm text-zinc-700 dark:text-zinc-300">Show Common Stock</span>
+              </CheckboxField>
+            </div>
+          )}
+
+          {/* Statistics */}
+          <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+            <div className="text-sm text-zinc-600 dark:text-zinc-400">
+              {useCustomSymbols 
+                ? `Showing ${watchlistComponents.length} of ${customSymbols.length} custom symbols`
+                : `Showing ${watchlistComponents.length} of ${(watchlistData || []).length} securities`
+              }
+            </div>
+          </div>
+        </div>
+        </div>
+      </DialogBody>
+        <DialogActions>
+          <Button onClick={() => setShowSettings(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
       </div>
     </div>
   );
